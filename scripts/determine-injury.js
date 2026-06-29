@@ -236,8 +236,7 @@ window.DetermineInjuryDialog = async function () {
 
                     let createdEffectItem = null;
                     try {
-                        // 1. Always create the World Item first so we have it for the chat card!
-                        createdEffectItem = await getOrCreateInjuryEffect(resultRow, categoryData);
+                        createdEffectItem = await getOrCreateInjuryEffect(resultRow, categoryData, targetActor);
                     } catch (error) {
                         console.error("Error creating injury item in World:", error);
                     }

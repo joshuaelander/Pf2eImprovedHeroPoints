@@ -1,3 +1,33 @@
+function buildInjuryEffectData(injuryData, categoryData, folderId, rules, effectName) {
+    const durationObj = categoryData.durationRounds
+        ? { value: categoryData.durationRounds, unit: "rounds", expiry: "turn-start" }
+        : { value: -1, unit: "unlimited", expiry: null };
+
+    return {
+        name: effectName,
+        type: "effect",
+        folder: folderId,
+        img: "icons/skills/wounds/injury-face-impact-orange.webp",
+        flags: {
+            "heroic-push-pf2e": {
+                injuryName: injuryData.name,
+                category: categoryData.title
+            }
+        },
+        system: {
+            description: {
+                value: `<p>${injuryData.text}</p><p><em>Duration: ${categoryData.durationRounds ? categoryData.durationRounds + " rounds (10 mins out of combat)" : "Until long rest or Treat Wounds."}</em></p>`
+            },
+            duration: durationObj,
+            rules,
+            level: { value: 0 },
+            traits: { value: [] },
+            tokenIcon: { show: true },
+            slug: foundry.utils.slugify(effectName)
+        }
+    };
+}
+
 export async function getInjuryFolder() {
     // Find or create a dedicated folder in the Items tab for our injuries
     let folder = game.folders.find(f => f.type === "Item" && f.name === "Heroic Push Injuries");
@@ -12,15 +42,12 @@ export async function getInjuryFolder() {
     return folder;
 }
 
-export async function getOrCreateInjuryEffect(injuryData, categoryData) {
+export async function getOrCreateInjuryEffect(injuryData, categoryData, actor = null) {
     const folder = await getInjuryFolder();
     if (!folder) {
         ui.notifications.error("Could not find or create the Heroic Push Injuries folder.");
         return null;
     }
-    const durationObj = categoryData.durationRounds
-        ? { value: categoryData.durationRounds, unit: "rounds", expiry: "turn-start" }
-        : { value: -1, unit: "unlimited", expiry: null };
 
     let rules = Array.isArray(injuryData.rules) ? [...injuryData.rules] : [];
 
@@ -28,7 +55,7 @@ export async function getOrCreateInjuryEffect(injuryData, categoryData) {
     if (injuryData.name === "Re-open Wound") {
         rules.push({
             key: "GrantItem",
-            uuid: "Compendium.pf2e.conditionitems.Item.lDVqvLKA6eF3Df60", // PF2e Persistent Damage UUID
+            uuid: "Compendium.pf2e.conditionitems.Item.lDVqvLKA6eF3Df60",
             inMemoryOnly: true,
             alterations: [
                 { mode: "override", property: "system.persistent.damageType", value: "bleed" },
@@ -38,43 +65,49 @@ export async function getOrCreateInjuryEffect(injuryData, categoryData) {
     }
 
     const effectName = `Injury: ${injuryData.name}`;
+    const effectData = buildInjuryEffectData(injuryData, categoryData, folder.id, rules, effectName);
 
-    // Check if we've already generated this exact item in the past
-    let item = game.items.find(i => i.name === effectName && i.folder?.id === folder.id);
+    let worldItem = game.items.find(i => i.name === effectName && i.type === "effect" && i.folder === folder.id);
 
-    // If it doesn't exist, create it as a real World Item
-    if (!item) {
-        const effectData = {
-            name: effectName,
-            type: "effect",
-            folder: folder.id,
-            img: "icons/skills/wounds/injury-face-impact-orange.webp",
-            system: {
-                description: {
-                    value: `<p>${injuryData.text}</p><p><em>Duration: ${categoryData.durationRounds ? categoryData.durationRounds + " rounds (10 mins out of combat)" : "Until long rest or Treat Wounds."}</em></p>`
-                },
-                duration: durationObj,
-                rules: rules,
-                tokenIcon: { show: true }
-            }
-        };
+    if (!worldItem) {
         try {
-            item = await Item.create(effectData, { renderSheet: false });
-            console.log("Heroic Push | Created new injury effect item:", item);
+            worldItem = await Item.create(effectData, { renderSheet: false });
+            console.log("Heroic Push | Created new injury effect item:", worldItem);
         } catch (err) {
             console.error("Heroic Push | Failed to create injury effect item:", err);
             ui.notifications.error("Failed to create injury effect item. See console for details.");
             return null;
         }
     }
-    return item;
+
+    if (actor) {
+        const existingActorEffect = actor.items?.find(i => i.name === effectName && i.type === "effect" && i.flags?.["heroic-push-pf2e"]?.injuryName === injuryData.name);
+        if (existingActorEffect) {
+            return existingActorEffect;
+        }
+
+        const embeddedData = foundry.utils.deepClone(worldItem.toObject());
+        delete embeddedData._id;
+        delete embeddedData.folder;
+        delete embeddedData.sort;
+
+        try {
+            const [embeddedItem] = await actor.createEmbeddedDocuments("Item", [embeddedData]);
+            return embeddedItem;
+        } catch (err) {
+            console.error("Heroic Push | Failed to embed injury effect on actor:", err);
+            ui.notifications.error("Failed to apply injury effect to actor. See console for details.");
+            return worldItem;
+        }
+    }
+
+    return worldItem;
 }
 
 export async function applyInjuryEffect(actor, injuryData, effectItem) {
     if (!actor) return;
 
-    //1. Apply standard hardcoded conditions via PF2e API (Sickened, Doomed, etc)
-    if (injuryData.conditions && injuryData.conditions.length >0) {
+    if (injuryData.conditions?.length) {
         for (const cond of injuryData.conditions) {
             try {
                 await actor.increaseCondition(cond.slug, { value: cond.value });
@@ -84,19 +117,19 @@ export async function applyInjuryEffect(actor, injuryData, effectItem) {
         }
     }
 
-    //2. Apply the newly created/fetched World Item as an embedded effect
     if (effectItem) {
-        // Strip out properties that should not be embedded (like _id, folder, sort)
-        const effectData = effectItem.toObject();
-        delete effectData._id;
-        delete effectData.folder;
-        delete effectData.sort;
-        // Optionally, remove any other properties not needed for embedded items
-        try {
-            await actor.createEmbeddedDocuments("Item", [effectData]);
-        } catch (err) {
-            console.error("Heroic Push | Failed to embed injury effect on actor:", err);
-            ui.notifications.error("Failed to apply injury effect to actor. See console for details.");
+        const existingEffect = actor.items?.find(i => i.name === effectItem.name && i.type === "effect");
+        if (!existingEffect) {
+            const effectData = foundry.utils.deepClone(effectItem.toObject());
+            delete effectData._id;
+            delete effectData.folder;
+            delete effectData.sort;
+            try {
+                await actor.createEmbeddedDocuments("Item", [effectData]);
+            } catch (err) {
+                console.error("Heroic Push | Failed to embed injury effect on actor:", err);
+                ui.notifications.error("Failed to apply injury effect to actor. See console for details.");
+            }
         }
     }
 }
