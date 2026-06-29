@@ -12,24 +12,37 @@ Hooks.on("getChatLogEntryContext", (html, options) => {
         return game.messages.get(id);
     };
 
+    // Centralized, bulletproof condition check
+    const canPush = (li) => {
+        const msg = getMsg(li);
+
+        // 1. Must be a valid message with dice rolls
+        if (!msg || (!msg.isRoll && !msg.rolls?.length)) return false;
+
+        // 2. Must be able to find the actor (handles linked and unlinked tokens safely)
+        const msgActor = msg.actor || game.actors.get(msg.speaker?.actor);
+        if (!msgActor) return false;
+
+        // 3. User must own the actor
+        if (!msgActor.isOwner) return false;
+
+        // 4. Actor MUST have hero points (the '?' prevents crashes on NPCs/Monsters)
+        const hp = msgActor.system?.resources?.heroPoints?.value || 0;
+        return hp > 0;
+    };
+
     // We use unshift to put our options at the TOP of the right-click menu
     options.unshift(
         {
             name: "Heroic Push (+1d6)",
             icon: '<i class="fas fa-dice-d6" style="color: #4a8a2a;"></i>',
-            condition: li => {
-                const msg = getMsg(li);
-                return msg?.isRoll && msg?.actor?.isOwner && (msg.actor.system.resources?.heroPoints?.value > 0);
-            },
+            condition: canPush,
             callback: li => doHeroicPush(getMsg(li), "1d6")
         },
         {
             name: "Reckless Push (+2d6)",
             icon: '<i class="fas fa-biohazard" style="color: #cc0000;"></i>',
-            condition: li => {
-                const msg = getMsg(li);
-                return msg?.isRoll && msg?.actor?.isOwner && (msg.actor.system.resources?.heroPoints?.value > 0);
-            },
+            condition: canPush,
             callback: li => doHeroicPush(getMsg(li), "2d6")
         }
     );
@@ -39,11 +52,12 @@ Hooks.on("getChatLogEntryContext", (html, options) => {
 async function doHeroicPush(message, diceString) {
     if (!message) return;
 
-    const msgActor = message.actor;
+    // Safely get actor
+    const msgActor = message.actor || game.actors.get(message.speaker?.actor);
     if (!msgActor) return ui.notifications.error("Could not find an actor associated with that roll.");
     if (!msgActor.isOwner) return ui.notifications.warn("You do not have permission to push this character's rolls.");
 
-    const hp = msgActor.system.resources?.heroPoints?.value || 0;
+    const hp = msgActor.system?.resources?.heroPoints?.value || 0;
     if (hp < 1) return ui.notifications.warn(`${msgActor.name} does not have enough Hero Points!`);
 
     // Deduct 1 Hero Point
