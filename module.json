@@ -2,7 +2,7 @@
   "id": "heroic-push-pf2e",
   "title": "PF2e Hero Point Remaster: Heroic Push",
   "description": "Adds right-click options to PF2e chat messages to spend Hero Points for +1d6 (Heroic) or +2d6 (Reckless) pushes.",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "compatibility": {
     "minimum": "12",
     "verified": "14"

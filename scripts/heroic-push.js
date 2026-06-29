@@ -152,6 +152,10 @@ async function doHeroicPush(message, diceString) {
 
     // Automated Injury Roll Logic
     if (diceString === "2d6") {
+        // --- NEW: Add a delay to let the 3D dice finish rolling ---
+        // 2500 = 2.5 seconds. Adjust this number if you need more or less time!
+        await new Promise(resolve => setTimeout(resolve, 2500));
+
         const injuryRoll = await new Roll("1d100").evaluate();
         let resultTitle, resultColor, tableRollText, icon;
 
