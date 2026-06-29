@@ -33,13 +33,13 @@ Hooks.once('init', () => {
         // We use unshift to put our options at the TOP of the right-click menu
         options.unshift(
             {
-                name: "Heroic Push (+1d6)",
+                name: "Reroll with Heroic Push (+1d6)",
                 icon: '<i class="fas fa-dice-d6" style="color: #4a8a2a;"></i>',
                 condition: canPush,
                 callback: li => doHeroicPush(getMsg(li), "1d6")
             },
             {
-                name: "Reckless Push (+2d6)",
+                name: "Reroll with Reckless Push (+2d6)",
                 icon: '<i class="fas fa-biohazard" style="color: #cc0000;"></i>',
                 condition: canPush,
                 callback: li => doHeroicPush(getMsg(li), "2d6")
@@ -50,12 +50,6 @@ Hooks.once('init', () => {
     // V13+ (ApplicationV2) Context Menu Hook
     Hooks.on("getChatMessageContextOptions", (app, options) => {
         console.log("Heroic Push PF2e | Hooked into getChatMessageContextOptions");
-        injectMenuOptions(options);
-    });
-
-    // V12 Legacy Context Menu Hook (Fallback)
-    Hooks.on("getChatLogEntryContext", (html, options) => {
-        console.log("Heroic Push PF2e | Hooked into getChatLogEntryContext");
         injectMenuOptions(options);
     });
 });
@@ -132,7 +126,6 @@ async function doHeroicPush(message, diceString) {
         await ChatMessage.create({
             speaker: message.speaker,
             rolls: [injuryRoll.toJSON()],
-            type: CONST.CHAT_MESSAGE_TYPES?.ROLL || 5, // Fallback for v12+ roll types
             flavor: `
                 <div style="background: rgba(0,0,0,0.05); border: 2px solid ${resultColor}; padding: 8px; border-radius: 5px; text-align: center; margin-bottom: 5px;">
                     <h4 style="color: ${resultColor}; margin: 0 0 5px 0; font-size: 1.2em; border-bottom: 1px solid ${resultColor}; padding-bottom: 3px;">
