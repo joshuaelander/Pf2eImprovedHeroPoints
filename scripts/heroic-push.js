@@ -3,49 +3,62 @@ Hooks.once('init', () => {
     console.log("Heroic Push PF2e | Initializing module");
 });
 
-// Inject into the Chat Context Menu natively
-Hooks.on("getChatLogEntryContext", (html, options) => {
-    // Helper to safely get the message document
-    const getMsg = (li) => {
-        const element = li.length ? li[0] : li;
-        const id = element.dataset?.messageId || element.getAttribute("data-message-id");
-        return game.messages.get(id);
-    };
+// Wrap the hook inside "ready" to ensure we load AFTER the PF2e system and other modules.
+Hooks.once('ready', () => {
+    console.log("Heroic Push PF2e | Registering Chat Context Menu Hook");
 
-    // Centralized, bulletproof condition check
-    const canPush = (li) => {
-        const msg = getMsg(li);
+    // Inject into the Chat Context Menu natively
+    Hooks.on("getChatLogEntryContext", (html, options) => {
 
-        // 1. Must be a valid message with dice rolls
-        if (!msg || (!msg.isRoll && !msg.rolls?.length)) return false;
+        // Helper to safely get the message document
+        const getMsg = (li) => {
+            const element = li.length ? li[0] : li;
+            const id = element.dataset?.messageId || element.getAttribute("data-message-id");
+            return game.messages.get(id);
+        };
 
-        // 2. Must be able to find the actor (handles linked and unlinked tokens safely)
-        const msgActor = msg.actor || game.actors.get(msg.speaker?.actor);
-        if (!msgActor) return false;
+        // Deep Debugging Condition Check - Watch the F12 Console when you right-click!
+        const canPush = (li) => {
+            const msg = getMsg(li);
+            if (!msg) return false;
 
-        // 3. User must own the actor
-        if (!msgActor.isOwner) return false;
+            // Broadened check to catch all PF2e custom roll types (Attacks, Saves, Damage, etc.)
+            const isRoll = msg.isRoll || (msg.rolls && msg.rolls.length > 0) || msg.flags?.pf2e?.context?.type;
 
-        // 4. Actor MUST have hero points (the '?' prevents crashes on NPCs/Monsters)
-        const hp = msgActor.system?.resources?.heroPoints?.value || 0;
-        return hp > 0;
-    };
+            const msgActor = msg.actor || game.actors.get(msg.speaker?.actor);
+            const hp = msgActor?.system?.resources?.heroPoints?.value || 0;
+            const isOwner = msgActor?.isOwner;
 
-    // We use unshift to put our options at the TOP of the right-click menu
-    options.unshift(
-        {
-            name: "Heroic Push (+1d6)",
-            icon: '<i class="fas fa-dice-d6" style="color: #4a8a2a;"></i>',
-            condition: canPush,
-            callback: li => doHeroicPush(getMsg(li), "1d6")
-        },
-        {
-            name: "Reckless Push (+2d6)",
-            icon: '<i class="fas fa-biohazard" style="color: #cc0000;"></i>',
-            condition: canPush,
-            callback: li => doHeroicPush(getMsg(li), "2d6")
-        }
-    );
+            // ---- CONSOLE LOGGING ----
+            // This will print every time you right-click a message. 
+            // If you don't see the buttons, this will tell you exactly why!
+            console.groupCollapsed(`Heroic Push Check: ${msgActor?.name || "Unknown Actor"}`);
+            console.log("1. Is it recognized as a Roll?", !!isRoll);
+            console.log("2. Is an Actor linked?", !!msgActor);
+            console.log("3. Do you own this Actor?", !!isOwner);
+            console.log("4. Does Actor have Hero Points?", hp > 0, `(Current HP: ${hp})`);
+            console.groupEnd();
+            // --------------------------
+
+            return isRoll && msgActor && isOwner && (hp > 0);
+        };
+
+        // We use unshift to put our options at the TOP of the right-click menu
+        options.unshift(
+            {
+                name: "Heroic Push (+1d6)",
+                icon: '<i class="fas fa-dice-d6" style="color: #4a8a2a;"></i>',
+                condition: canPush,
+                callback: li => doHeroicPush(getMsg(li), "1d6")
+            },
+            {
+                name: "Reckless Push (+2d6)",
+                icon: '<i class="fas fa-biohazard" style="color: #cc0000;"></i>',
+                condition: canPush,
+                callback: li => doHeroicPush(getMsg(li), "2d6")
+            }
+        );
+    });
 });
 
 // The core pushing logic
