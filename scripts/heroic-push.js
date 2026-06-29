@@ -19,11 +19,14 @@ Hooks.once('init', () => {
                 const msgActor = msg.actor || game.actors.get(msg.speaker?.actor);
                 if (!msgActor) return false;
 
-                // Broadened check to catch all PF2e custom roll types
-                const isRoll = msg.isRoll || (msg.rolls && msg.rolls.length > 0) || msg.flags?.pf2e?.context?.type;
+                // Strictly check that the message actually contains dice rolls
+                const isRoll = msg.isRoll || (msg.rolls && msg.rolls.length > 0);
                 const hp = msgActor.system?.resources?.heroPoints?.value || 0;
 
-                return Boolean(isRoll && msgActor.isOwner && hp > 0);
+                // Ensure it's a roll, the user owns it, it has Hero Points, AND it's not a damage roll (optional: removes button from damage)
+                const isNotDamage = !msg.flags?.pf2e?.context?.type?.includes("damage");
+
+                return Boolean(isRoll && msgActor.isOwner && hp > 0 && isNotDamage);
             } catch (err) {
                 console.error("Heroic Push Condition Error:", err);
                 return false;
