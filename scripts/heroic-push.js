@@ -1,10 +1,8 @@
-// Initialize module
 Hooks.once('init', () => {
     console.log("Heroic Push PF2e | Initializing module");
 
-    // Helper function to build the options, regardless of which hook called it
+    // Helper function to build the options
     const injectMenuOptions = (options) => {
-        // V13+ ApplicationV2 uses 'documentId' in datasets, V12 uses 'messageId'
         const getMsg = (li) => {
             const element = li instanceof HTMLElement ? li : (li.length ? li[0] : li);
             const id = element.dataset?.messageId || element.dataset?.documentId || element.getAttribute("data-message-id");
@@ -50,18 +48,14 @@ Hooks.once('init', () => {
         );
     };
 
-    // V13+ (ApplicationV2) Context Menu Hook
     Hooks.on("getChatMessageContextOptions", (app, options) => {
-        console.log("Heroic Push PF2e | Hooked into getChatMessageContextOptions");
         injectMenuOptions(options);
     });
 });
 
-// The core pushing logic
 async function doHeroicPush(message, diceString) {
     if (!message) return;
 
-    // Safely get actor
     const msgActor = message.actor || game.actors.get(message.speaker?.actor);
     if (!msgActor) return ui.notifications.error("Could not find an actor associated with that roll.");
     if (!msgActor.isOwner) return ui.notifications.warn("You do not have permission to push this character's rolls.");
@@ -93,34 +87,27 @@ async function doHeroicPush(message, diceString) {
             </div>
         </div>`;
 
-    // Clone message data
     const msgData = message.toObject();
     delete msgData._id;
     delete msgData.timestamp;
 
-    msgData.rolls = [newRoll.toJSON()];
+    msgData.rolls = [newRoll];
 
-    // --- NEW: Calculate New Degree of Success ---
+    // Degree of Success calculation logic
     let originalFlavor = msgData.flavor || "";
     const context = msgData.flags?.pf2e?.context;
-
-    // Only calculate if the original roll actually had a Target DC
     if (context && context.dc) {
         const dcValue = context.dc.value;
         const total = newRoll.total;
-
-        // Find the d20 roll to check for Natural 1s and 20s
         const d20Roll = newRoll.dice.find(d => d.faces === 20);
         const d20Result = d20Roll ? d20Roll.results.find(r => r.active)?.result : null;
 
-        // Base math: 0 = Crit Fail, 1 = Fail, 2 = Success, 3 = Crit Success
         let degree = 0;
         if (total >= dcValue + 10) degree = 3;
         else if (total >= dcValue) degree = 2;
         else if (total <= dcValue - 10) degree = 0;
         else degree = 1;
 
-        // Nat 20/Nat 1 adjustments
         if (d20Result === 20) degree = Math.min(3, degree + 1);
         if (d20Result === 1) degree = Math.max(0, degree - 1);
 
@@ -128,18 +115,13 @@ async function doHeroicPush(message, diceString) {
         const outcomeLabels = ["Critical Failure", "Failure", "Success", "Critical Success"];
         const newOutcome = outcomes[degree];
 
-        // Update the PF2e internal data flags
         context.outcome = newOutcome;
         if (context.unadjustedOutcome) context.unadjustedOutcome = newOutcome;
 
-        // Use DOM manipulation to update the visual badge safely
         const tempDiv = document.createElement("div");
         tempDiv.innerHTML = originalFlavor;
-
-        // Find the PF2e result badge
         const badge = tempDiv.querySelector('.degree-of-success');
         if (badge) {
-            // Strip old outcome classes and apply the new one
             outcomes.forEach(o => badge.classList.remove(o));
             badge.classList.add(newOutcome);
             badge.innerHTML = outcomeLabels[degree];
@@ -147,16 +129,10 @@ async function doHeroicPush(message, diceString) {
         originalFlavor = tempDiv.innerHTML;
     }
 
-    // Apply the newly processed flavor text
     msgData.flavor = flavorPrefix + originalFlavor;
-    // --- END NEW ---
-
     await ChatMessage.create(msgData);
 
-    // Automated Injury Roll Logic
     if (diceString === "2d6") {
-        // --- NEW: Add a delay to let the 3D dice finish rolling ---
-        // 2500 = 2.5 seconds. Adjust this number if you need more or less time!
         await new Promise(resolve => setTimeout(resolve, 2500));
 
         const injuryRoll = await new Roll("1d100").evaluate();
@@ -179,10 +155,9 @@ async function doHeroicPush(message, diceString) {
             tableRollText = `The hero suffered a Major Injury! Rolling for consequence...`;
         }
 
-        // Post the automated injury result to chat for everyone to see
         await ChatMessage.create({
             speaker: message.speaker,
-            rolls: [injuryRoll.toJSON()],
+            rolls: [injuryRoll],
             flavor: `
                 <div style="background: rgba(0,0,0,0.05); border: 2px solid ${resultColor}; padding: 8px; border-radius: 5px; text-align: center; margin-bottom: 5px;">
                     <h4 style="color: ${resultColor}; margin: 0 0 5px 0; font-size: 1.2em; border-bottom: 1px solid ${resultColor}; padding-bottom: 3px;">
@@ -192,7 +167,6 @@ async function doHeroicPush(message, diceString) {
                 </div>`
         });
 
-        // Trigger macro or bundled function if an injury occurred
         if (injuryRoll.total < 34) {
             const macroName = "Determine Injury";
             const injuryMacro = game.macros.getName(macroName);
