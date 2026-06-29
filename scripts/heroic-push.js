@@ -96,7 +96,57 @@ async function doHeroicPush(message, diceString) {
     delete msgData.timestamp;
 
     msgData.rolls = [newRoll.toJSON()];
-    msgData.flavor = flavorPrefix + (msgData.flavor || "");
+
+    // --- NEW: Calculate New Degree of Success ---
+    let originalFlavor = msgData.flavor || "";
+    const context = msgData.flags?.pf2e?.context;
+
+    // Only calculate if the original roll actually had a Target DC
+    if (context && context.dc) {
+        const dcValue = context.dc.value;
+        const total = newRoll.total;
+
+        // Find the d20 roll to check for Natural 1s and 20s
+        const d20Roll = newRoll.dice.find(d => d.faces === 20);
+        const d20Result = d20Roll ? d20Roll.results.find(r => r.active)?.result : null;
+
+        // Base math: 0 = Crit Fail, 1 = Fail, 2 = Success, 3 = Crit Success
+        let degree = 0;
+        if (total >= dcValue + 10) degree = 3;
+        else if (total >= dcValue) degree = 2;
+        else if (total <= dcValue - 10) degree = 0;
+        else degree = 1;
+
+        // Nat 20/Nat 1 adjustments
+        if (d20Result === 20) degree = Math.min(3, degree + 1);
+        if (d20Result === 1) degree = Math.max(0, degree - 1);
+
+        const outcomes = ["criticalFailure", "failure", "success", "criticalSuccess"];
+        const outcomeLabels = ["Critical Failure", "Failure", "Success", "Critical Success"];
+        const newOutcome = outcomes[degree];
+
+        // Update the PF2e internal data flags
+        context.outcome = newOutcome;
+        if (context.unadjustedOutcome) context.unadjustedOutcome = newOutcome;
+
+        // Use DOM manipulation to update the visual badge safely
+        const tempDiv = document.createElement("div");
+        tempDiv.innerHTML = originalFlavor;
+
+        // Find the PF2e result badge
+        const badge = tempDiv.querySelector('.degree-of-success');
+        if (badge) {
+            // Strip old outcome classes and apply the new one
+            outcomes.forEach(o => badge.classList.remove(o));
+            badge.classList.add(newOutcome);
+            badge.innerHTML = outcomeLabels[degree];
+        }
+        originalFlavor = tempDiv.innerHTML;
+    }
+
+    // Apply the newly processed flavor text
+    msgData.flavor = flavorPrefix + originalFlavor;
+    // --- END NEW ---
 
     await ChatMessage.create(msgData);
 
