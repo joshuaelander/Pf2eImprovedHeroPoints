@@ -1,0 +1,30 @@
+{
+  "id": "heroic-push-pf2e",
+  "title": "PF2e Hero Point Remaster: Heroic Push",
+  "description": "Adds right-click options to PF2e chat messages to spend Hero Points for +1d6 (Heroic) or +2d6 (Reckless) pushes.",
+  "version": "1.0.0",
+  "compatibility": {
+    "minimum": "12",
+    "verified": "14"
+  },
+  "authors": [
+    {
+      "name": "Aeneas"
+    }
+  ],
+  "relationships": {
+    "systems": [
+      {
+        "id": "pf2e",
+        "type": "system"
+      }
+    ]
+  },
+  "url": "https://github.com/joshuaelander/Pf2eImprovedHeroPoints",
+  "manifest": "https://raw.githubusercontent.com/joshuaelander/Pf2eImprovedHeroPoints/main/module.json",
+  "download": "https://github.com/joshuaelander/Pf2eImprovedHeroPoints/archive/refs/heads/main.zip",
+  "esmodules": [
+    "scripts/heroic-push.js",
+    "scripts/determine-injury.js"
+  ]
+}
