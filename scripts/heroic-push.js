@@ -74,7 +74,7 @@ async function doHeroicPush(message, diceString) {
     const newFormula = `${baseFormula} + ${diceString}[Heroic Push]`;
     const RollClass = oldRoll.constructor;
     const newRoll = new RollClass(newFormula, oldRoll.data, oldRoll.options);
-    newRoll.evaluateSync();
+    await newRoll.evaluate();
 
     const pushFlavor = diceString === "1d6" ? "(No Injury)" : "(Chance of Injury)";
     const flavorPrefix = `
@@ -137,7 +137,7 @@ async function doHeroicPush(message, diceString) {
         await new Promise(resolve => setTimeout(resolve, 2500));
 
         const injuryRoll = new Roll("1d100");
-        injuryRoll.evaluateSync();
+        await injuryRoll.evaluate();
         let resultTitle, resultColor, tableRollText, icon;
 
         if (injuryRoll.total >= 34) {

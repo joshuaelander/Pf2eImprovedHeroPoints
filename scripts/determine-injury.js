@@ -227,7 +227,7 @@ window.DetermineInjuryDialog = async function () {
 
                     const diceType = categoryData.dice || "1d10";
                     const roll = new Roll(diceType);
-                    roll.evaluateSync();
+                    await roll.evaluate();
 
                     const resultRow = categoryData.results[roll.total];
 

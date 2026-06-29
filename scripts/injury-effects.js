@@ -1,32 +1,4 @@
-function buildInjuryEffectData(injuryData, categoryData, folderId, rules, effectName) {
-    const durationObj = categoryData.durationRounds
-        ? { value: categoryData.durationRounds, unit: "rounds", expiry: "turn-start" }
-        : { value: -1, unit: "unlimited", expiry: null };
-
-    return {
-        name: effectName,
-        type: "effect",
-        folder: folderId,
-        img: "icons/skills/wounds/injury-face-impact-orange.webp",
-        flags: {
-            "heroic-push-pf2e": {
-                injuryName: injuryData.name,
-                category: categoryData.title
-            }
-        },
-        system: {
-            description: {
-                value: `<p>${injuryData.text}</p><p><em>Duration: ${categoryData.durationRounds ? categoryData.durationRounds + " rounds (10 mins out of combat)" : "Until long rest or Treat Wounds."}</em></p>`
-            },
-            duration: durationObj,
-            rules,
-            level: { value: 0 },
-            traits: { value: [] },
-            tokenIcon: { show: true },
-            slug: foundry.utils.slugify(effectName)
-        }
-    };
-}
+import { createPrebuiltInjuryItemData } from "../data/injury-items.js";
 
 export async function getInjuryFolder() {
     // Find or create a dedicated folder in the Items tab for our injuries
@@ -49,23 +21,8 @@ export async function getOrCreateInjuryEffect(injuryData, categoryData, actor = 
         return null;
     }
 
-    let rules = Array.isArray(injuryData.rules) ? [...injuryData.rules] : [];
-
-    // Special PF2e Logic: Auto-attach Persistent Bleed condition for Re-open Wound
-    if (injuryData.name === "Re-open Wound") {
-        rules.push({
-            key: "GrantItem",
-            uuid: "Compendium.pf2e.conditionitems.Item.lDVqvLKA6eF3Df60",
-            inMemoryOnly: true,
-            alterations: [
-                { mode: "override", property: "system.persistent.damageType", value: "bleed" },
-                { mode: "override", property: "system.persistent.formula", value: "1d4" }
-            ]
-        });
-    }
-
     const effectName = `Injury: ${injuryData.name}`;
-    const effectData = buildInjuryEffectData(injuryData, categoryData, folder.id, rules, effectName);
+    const effectData = createPrebuiltInjuryItemData(injuryData, categoryData, folder.id, effectName, Array.isArray(injuryData.rules) ? [...injuryData.rules] : []);
 
     let worldItem = game.items.find(i => i.name === effectName && i.type === "effect" && i.folder === folder.id);
 
