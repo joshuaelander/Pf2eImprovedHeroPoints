@@ -10,18 +10,41 @@ const PRESET_RULES = {
             ]
         }
     ],
+    "Pounding Ears": [],
     "Pulled Hamstring": [
         { key: "FlatModifier", selector: "speed", value: -5, type: "status" }
     ],
+    "Hyperventilation": [],
     "Tunnel Vision": [
         { key: "FlatModifier", selector: "perception", value: -2, type: "status" }
     ],
+    "Tripped Up": [],
+    "Strained Core": [],
+    "Disoriented": [],
+    "Dizziness": [],
+    "Sprained Wrist": [],
+    "Overextended": [],
+    "Jarred Nerves": [],
+    "Magical/Physical Feedback": [],
+    "Numb Grip": [],
+    "Bruised Rib": [],
+    "Thrown Off Balance": [],
+    "Strained Muscles": [],
+    "Bile and Nausea": [],
+    "Wind Knocked Out": [],
     "Twisted Ankle": [
         { key: "FlatModifier", selector: "land-speed", value: -5, type: "status" }
     ],
+    "Concussive Rattle": [],
+    "Emotional Damage": [],
+    "Dust in the Eyes": [],
+    "Panic Response": [],
+    "Unnerved": [],
     "Battered": [
         { key: "Weakness", type: "physical", value: 2 }
     ],
+    "Dislocated Joint": [],
+    "Frustration": [],
     "Muscle Spasm": [
         { key: "FlatModifier", selector: "str-based", value: -2, type: "status" },
         { key: "FlatModifier", selector: "dex-based", value: -2, type: "status" }
@@ -30,9 +53,24 @@ const PRESET_RULES = {
         { key: "FlatModifier", selector: "int-based", value: -2, type: "status" },
         { key: "FlatModifier", selector: "wis-based", value: -2, type: "status" }
     ],
+    "Trembling Hands": [],
+    "Mental Exhaustion": [],
+    "Short of Breath": [
+        { key: "FlatModifier", selector: "fortitude", value: -1, type: "status" }
+    ],
+    "Broken Tool": [],
+    "Lingering Doubt": [],
     "Social Faux Pas": [
         { key: "FlatModifier", selector: "cha-based", value: -2, type: "status" }
     ],
+    "Distracted": [],
+    "Magical Backlash": [],
+    "Aetheric Burn": [],
+    "Mnemonic Strain": [],
+    "Somatic Jitters": [],
+    "Overloaded Senses": [],
+    "Blurred Focus": [],
+    "Drained Vigor": [],
     "Arcane Static": [
         { key: "FlatModifier", selector: "perception", value: -2, type: "status" }
     ],
@@ -52,15 +90,18 @@ const PRESET_RULES = {
         { key: "FlatModifier", selector: "athletics", value: -2, type: "status" },
         { key: "FlatModifier", selector: "acrobatics", value: -2, type: "status" }
     ],
+    "Jumpy": [],
+    "Trembling Grip": [],
+    "Strained Back": [],
+    "Twisted Joint": [],
+    "Mild Concussion": [],
     "Dazed": [
         { key: "FlatModifier", selector: "initiative", value: -2, type: "status" }
     ],
     "Aches and Pains": [
         { key: "Weakness", type: "physical", value: 1 }
     ],
-    "Short of Breath": [
-        { key: "FlatModifier", selector: "fortitude", value: -1, type: "status" }
-    ],
+    "Sensitive Eyes": [],
     "Slow Reflexes": [
         { key: "FlatModifier", selector: "reflex", value: -1, type: "status" }
     ],
@@ -73,7 +114,19 @@ const PRESET_RULES = {
     "Feverish": [
         { key: "FlatModifier", selector: "saving-throw", value: -1, type: "status", predicate: ["poison"] },
         { key: "FlatModifier", selector: "saving-throw", value: -1, type: "status", predicate: ["disease"] }
-    ]
+    ],
+    "Numb Fingers": [],
+    "Lingering Wound": [],
+    "Internal Bleeding": [],
+    "Shattered Resolve": [],
+    "Lingering Trauma": [],
+    "Fractured Limb": [],
+    "Severe Concussion": [],
+    "Ruptured Eardrum": [],
+    "Damaged Eye": [],
+    "Deep Laceration": [],
+    "Torn Tendon": [],
+    "System Shock": []
 };
 
 export function createPrebuiltInjuryItemData(injuryData, categoryData, folderId, effectName, extraRules = []) {

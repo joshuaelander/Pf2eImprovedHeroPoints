@@ -28,8 +28,15 @@ export async function getOrCreateInjuryEffect(injuryData, categoryData, actor = 
 
     if (!worldItem) {
         try {
-            worldItem = await Item.create(effectData, { renderSheet: false });
-            console.log("Heroic Push | Created new injury effect item:", worldItem);
+            if (typeof Item.createDocuments === "function") {
+                const createdDocuments = await Item.createDocuments([effectData], { renderSheet: false });
+                worldItem = createdDocuments?.[0] ?? null;
+            } else {
+                worldItem = await Item.create(effectData, { renderSheet: false });
+            }
+            if (worldItem) {
+                console.log("Heroic Push | Created new injury effect item:", worldItem);
+            }
         } catch (err) {
             console.error("Heroic Push | Failed to create injury effect item:", err);
             ui.notifications.error("Failed to create injury effect item. See console for details.");
@@ -49,7 +56,7 @@ export async function getOrCreateInjuryEffect(injuryData, categoryData, actor = 
         delete embeddedData.sort;
 
         try {
-            const [embeddedItem] = await actor.createEmbeddedDocuments("Item", [embeddedData]);
+            const [embeddedItem] = await actor.createEmbeddedDocuments("Item", [embeddedData], { renderSheet: false });
             return embeddedItem;
         } catch (err) {
             console.error("Heroic Push | Failed to embed injury effect on actor:", err);
@@ -82,7 +89,7 @@ export async function applyInjuryEffect(actor, injuryData, effectItem) {
             delete effectData.folder;
             delete effectData.sort;
             try {
-                await actor.createEmbeddedDocuments("Item", [effectData]);
+                await actor.createEmbeddedDocuments("Item", [effectData], { renderSheet: false });
             } catch (err) {
                 console.error("Heroic Push | Failed to embed injury effect on actor:", err);
                 ui.notifications.error("Failed to apply injury effect to actor. See console for details.");
