@@ -2,13 +2,12 @@
 Hooks.once('init', () => {
     console.log("Heroic Push PF2e | Initializing module");
 
-    Hooks.on("getChatLogEntryContext", (html, options) => {
-        console.log("Heroic Push PF2e | Chat Context Menu Hooked Successfully!");
-
-        // Helper to safely get the message document (V14 pure-DOM compatible)
+    // Helper function to build the options, regardless of which hook called it
+    const injectMenuOptions = (options) => {
+        // V13+ ApplicationV2 uses 'documentId' in datasets, V12 uses 'messageId'
         const getMsg = (li) => {
             const element = li instanceof HTMLElement ? li : (li.length ? li[0] : li);
-            const id = element.dataset?.messageId || element.getAttribute("data-message-id");
+            const id = element.dataset?.messageId || element.dataset?.documentId || element.getAttribute("data-message-id");
             return game.messages.get(id);
         };
 
@@ -46,6 +45,18 @@ Hooks.once('init', () => {
                 callback: li => doHeroicPush(getMsg(li), "2d6")
             }
         );
+    };
+
+    // V13+ (ApplicationV2) Context Menu Hook
+    Hooks.on("getChatMessageContextOptions", (app, options) => {
+        console.log("Heroic Push PF2e | Hooked into getChatMessageContextOptions");
+        injectMenuOptions(options);
+    });
+
+    // V12 Legacy Context Menu Hook (Fallback)
+    Hooks.on("getChatLogEntryContext", (html, options) => {
+        console.log("Heroic Push PF2e | Hooked into getChatLogEntryContext");
+        injectMenuOptions(options);
     });
 });
 
