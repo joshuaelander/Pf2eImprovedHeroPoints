@@ -1,46 +1,34 @@
 // Initialize module
 Hooks.once('init', () => {
     console.log("Heroic Push PF2e | Initializing module");
-});
 
-// Wrap the hook inside "ready" to ensure we load AFTER the PF2e system and other modules.
-Hooks.once('ready', () => {
-    console.log("Heroic Push PF2e | Registering Chat Context Menu Hook");
-
-    // Inject into the Chat Context Menu natively
     Hooks.on("getChatLogEntryContext", (html, options) => {
+        console.log("Heroic Push PF2e | Chat Context Menu Hooked Successfully!");
 
-        // Helper to safely get the message document
+        // Helper to safely get the message document (V14 pure-DOM compatible)
         const getMsg = (li) => {
-            const element = li.length ? li[0] : li;
+            const element = li instanceof HTMLElement ? li : (li.length ? li[0] : li);
             const id = element.dataset?.messageId || element.getAttribute("data-message-id");
             return game.messages.get(id);
         };
 
-        // Deep Debugging Condition Check - Watch the F12 Console when you right-click!
         const canPush = (li) => {
-            const msg = getMsg(li);
-            if (!msg) return false;
+            try {
+                const msg = getMsg(li);
+                if (!msg) return false;
 
-            // Broadened check to catch all PF2e custom roll types (Attacks, Saves, Damage, etc.)
-            const isRoll = msg.isRoll || (msg.rolls && msg.rolls.length > 0) || msg.flags?.pf2e?.context?.type;
+                const msgActor = msg.actor || game.actors.get(msg.speaker?.actor);
+                if (!msgActor) return false;
 
-            const msgActor = msg.actor || game.actors.get(msg.speaker?.actor);
-            const hp = msgActor?.system?.resources?.heroPoints?.value || 0;
-            const isOwner = msgActor?.isOwner;
+                // Broadened check to catch all PF2e custom roll types
+                const isRoll = msg.isRoll || (msg.rolls && msg.rolls.length > 0) || msg.flags?.pf2e?.context?.type;
+                const hp = msgActor.system?.resources?.heroPoints?.value || 0;
 
-            // ---- CONSOLE LOGGING ----
-            // This will print every time you right-click a message. 
-            // If you don't see the buttons, this will tell you exactly why!
-            console.groupCollapsed(`Heroic Push Check: ${msgActor?.name || "Unknown Actor"}`);
-            console.log("1. Is it recognized as a Roll?", !!isRoll);
-            console.log("2. Is an Actor linked?", !!msgActor);
-            console.log("3. Do you own this Actor?", !!isOwner);
-            console.log("4. Does Actor have Hero Points?", hp > 0, `(Current HP: ${hp})`);
-            console.groupEnd();
-            // --------------------------
-
-            return isRoll && msgActor && isOwner && (hp > 0);
+                return Boolean(isRoll && msgActor.isOwner && hp > 0);
+            } catch (err) {
+                console.error("Heroic Push Condition Error:", err);
+                return false;
+            }
         };
 
         // We use unshift to put our options at the TOP of the right-click menu
