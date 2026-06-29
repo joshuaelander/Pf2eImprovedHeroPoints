@@ -190,7 +190,7 @@ window.DetermineInjuryDialog = async function () {
             user: game.user.id,
             speaker: ChatMessage.getSpeaker({ actor: actor }),
             content: content,
-            rolls: [roll],
+            rolls: [roll.toJSON()],
             sound: CONFIG.sounds.dice
         });
     }

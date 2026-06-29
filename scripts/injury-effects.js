@@ -2,13 +2,22 @@ export async function getInjuryFolder() {
     // Find or create a dedicated folder in the Items tab for our injuries
     let folder = game.folders.find(f => f.type === "Item" && f.name === "Heroic Push Injuries");
     if (!folder) {
-        folder = await Folder.create({ name: "Heroic Push Injuries", type: "Item", color: "#cc0000" });
+        try {
+            folder = await Folder.create({ name: "Heroic Push Injuries", type: "Item", color: "#cc0000" });
+        } catch (err) {
+            console.error("Heroic Push | Failed to create injury folder:", err);
+            return null;
+        }
     }
     return folder;
 }
 
 export async function getOrCreateInjuryEffect(injuryData, categoryData) {
     const folder = await getInjuryFolder();
+    if (!folder) {
+        ui.notifications.error("Could not find or create the Heroic Push Injuries folder.");
+        return null;
+    }
     const durationObj = categoryData.durationRounds
         ? { value: categoryData.durationRounds, unit: "rounds", expiry: "turn-start" }
         : { value: -1, unit: "unlimited", expiry: null };
@@ -49,7 +58,14 @@ export async function getOrCreateInjuryEffect(injuryData, categoryData) {
                 tokenIcon: { show: true }
             }
         };
-        item = await Item.create(effectData);
+        try {
+            item = await Item.create(effectData, { renderSheet: false });
+            console.log("Heroic Push | Created new injury effect item:", item);
+        } catch (err) {
+            console.error("Heroic Push | Failed to create injury effect item:", err);
+            ui.notifications.error("Failed to create injury effect item. See console for details.");
+            return null;
+        }
     }
     return item;
 }
@@ -57,15 +73,30 @@ export async function getOrCreateInjuryEffect(injuryData, categoryData) {
 export async function applyInjuryEffect(actor, injuryData, effectItem) {
     if (!actor) return;
 
-    // 1. Apply standard hardcoded conditions via PF2e API (Sickened, Doomed, etc)
-    if (injuryData.conditions && injuryData.conditions.length > 0) {
+    //1. Apply standard hardcoded conditions via PF2e API (Sickened, Doomed, etc)
+    if (injuryData.conditions && injuryData.conditions.length >0) {
         for (const cond of injuryData.conditions) {
-            await actor.increaseCondition(cond.slug, { value: cond.value });
+            try {
+                await actor.increaseCondition(cond.slug, { value: cond.value });
+            } catch (err) {
+                console.warn(`Heroic Push | Could not apply condition ${cond.slug}:`, err);
+            }
         }
     }
 
-    // 2. Apply the newly created/fetched World Item
+    //2. Apply the newly created/fetched World Item as an embedded effect
     if (effectItem) {
-        await actor.createEmbeddedDocuments("Item", [effectItem.toObject()]);
+        // Strip out properties that should not be embedded (like _id, folder, sort)
+        const effectData = effectItem.toObject();
+        delete effectData._id;
+        delete effectData.folder;
+        delete effectData.sort;
+        // Optionally, remove any other properties not needed for embedded items
+        try {
+            await actor.createEmbeddedDocuments("Item", [effectData]);
+        } catch (err) {
+            console.error("Heroic Push | Failed to embed injury effect on actor:", err);
+            ui.notifications.error("Failed to apply injury effect to actor. See console for details.");
+        }
     }
 }
