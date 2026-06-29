@@ -164,9 +164,7 @@ window.DetermineInjuryDialog = async function () {
 
         // Highlight variables like [X] for visual clarity
         const formattedText = injuryResult.text.replace(/\[X\]/g, '<strong><span style="color: red; font-size: 1.1em;">X</span></strong>');
-
-        // Create draggable item link if the item was created successfully
-        const draggableLink = effectItem ? `<div style="margin-top: 10px; padding: 5px; background: rgba(0,0,0,0.1); border-radius: 3px; text-align: center;"><strong>Drag to apply:</strong> <br> @UUID[${effectItem.uuid}]</div>` : "";
+        const effectSummary = effectItem ? `<p style="margin: 5px 0; font-size: 0.9em;"><em>Effect prepared for ${actorName}: ${effectItem.name}</em></p>` : "";
 
         const content = `
             <div class="pf2e chat-card" style="border: 1px solid #191813; border-radius: 4px; padding: 5px;">
@@ -181,7 +179,7 @@ window.DetermineInjuryDialog = async function () {
                     <h4 style="font-family: 'Modesto Condensed', sans-serif; font-size: 1.3em; margin: 5px 0;">${injuryResult.name}</h4>
                     <p style="margin: 5px 0;">${formattedText}</p>
                     <p style="margin: 5px 0; font-size: 0.9em; color: #555;"><em>Duration: ${durationText}</em></p>
-                    ${draggableLink}
+                    ${effectSummary}
                 </div>
             </div>
         `;
@@ -190,7 +188,6 @@ window.DetermineInjuryDialog = async function () {
             user: game.user.id,
             speaker: ChatMessage.getSpeaker({ actor: actor }),
             content: content,
-            rolls: [roll.toJSON()],
             sound: CONFIG.sounds.dice
         });
     }
@@ -230,7 +227,7 @@ window.DetermineInjuryDialog = async function () {
 
                     const diceType = categoryData.dice || "1d10";
                     const roll = new Roll(diceType);
-                    await roll.evaluate();
+                    roll.evaluateSync();
 
                     const resultRow = categoryData.results[roll.total];
 
