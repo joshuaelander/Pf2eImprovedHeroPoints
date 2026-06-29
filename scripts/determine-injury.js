@@ -1,11 +1,7 @@
-/**
- * PF2e Minor/Major Injury Table
- * Built for Foundry VTT v14+ and the PF2e System.
- * Exposed to window so it can be called by the Heroic Push module 
- * OR placed inside a standard Foundry Macro!
- */
-window.DetermineInjuryDialog = function () {
-    // Ensure we have a target to apply effects to (evaluated when function runs)
+import { getOrCreateInjuryEffect, applyInjuryEffect } from "./injury-effects.js";
+
+window.DetermineInjuryDialog = async function () {
+    // Ensure we have a target to apply effects to
     const targetActor = canvas.tokens.controlled[0]?.actor || game.user.character;
 
     const INJURY_DATA = {
@@ -120,7 +116,7 @@ window.DetermineInjuryDialog = function () {
         },
         major: {
             title: "Major Injury",
-            durationRounds: null, // Until long rest / treat wounds
+            durationRounds: null,
             results: {
                 1: { name: "Internal Bleeding", text: "You are drained 1.", conditions: [{ slug: "drained", value: 1 }] },
                 2: { name: "Shattered Resolve", text: "You are doomed 1.", conditions: [{ slug: "doomed", value: 1 }] },
@@ -162,44 +158,15 @@ window.DetermineInjuryDialog = function () {
     </form>
     `;
 
-    async function applyInjuryEffect(actor, injuryData, categoryData) {
-        if (!actor) return;
-
-        // 1. Apply standard conditions via PF2e API
-        if (injuryData.conditions && injuryData.conditions.length > 0) {
-            for (const cond of injuryData.conditions) {
-                await actor.increaseCondition(cond.slug, { value: cond.value });
-            }
-        }
-
-        // 2. Create a generic temporary effect item for custom rules and text
-        const durationObj = categoryData.durationRounds
-            ? { value: categoryData.durationRounds, unit: "rounds", expiry: "turn-start" }
-            : { value: -1, unit: "unlimited", expiry: null };
-
-        const effectData = {
-            type: "effect",
-            name: `Injury: ${injuryData.name}`,
-            img: "icons/skills/wounds/injury-face-impact-orange.webp",
-            system: {
-                description: {
-                    value: `<p>${injuryData.text}</p><p><em>Duration: ${categoryData.durationRounds ? categoryData.durationRounds + " rounds (10 mins out of combat)" : "Until long rest or Treat Wounds."}</em></p>`
-                },
-                duration: durationObj,
-                rules: injuryData.rules || [],
-                tokenIcon: { show: true }
-            }
-        };
-
-        await actor.createEmbeddedDocuments("Item", [effectData]);
-    }
-
-    async function sendChatCard(roll, injuryResult, categoryTitle, actor) {
+    async function sendChatCard(roll, injuryResult, categoryTitle, actor, effectItem) {
         const actorName = actor ? actor.name : "An unknown creature";
         const durationText = categoryTitle.includes("Minor") ? "2 Rounds (or 10 mins out of combat)" : "Until Long Rest / Treat Wounds";
 
         // Highlight variables like [X] for visual clarity
         const formattedText = injuryResult.text.replace(/\[X\]/g, '<strong><span style="color: red; font-size: 1.1em;">X</span></strong>');
+
+        // Create draggable item link if the item was created successfully
+        const draggableLink = effectItem ? `<div style="margin-top: 10px; padding: 5px; background: rgba(0,0,0,0.1); border-radius: 3px; text-align: center;"><strong>Drag to apply:</strong> <br> @UUID[${effectItem.uuid}]</div>` : "";
 
         const content = `
             <div class="pf2e chat-card" style="border: 1px solid #191813; border-radius: 4px; padding: 5px;">
@@ -214,6 +181,7 @@ window.DetermineInjuryDialog = function () {
                     <h4 style="font-family: 'Modesto Condensed', sans-serif; font-size: 1.3em; margin: 5px 0;">${injuryResult.name}</h4>
                     <p style="margin: 5px 0;">${formattedText}</p>
                     <p style="margin: 5px 0; font-size: 0.9em; color: #555;"><em>Duration: ${durationText}</em></p>
+                    ${draggableLink}
                 </div>
             </div>
         `;
@@ -231,15 +199,19 @@ window.DetermineInjuryDialog = function () {
         title: "Determine Injury",
         content: dialogHtml,
         render: (html) => {
-            // Replaced inner <script> tag with native Foundry render callback for flawless execution
-            html.find("#severity").change(function () {
-                const triggerContainer = html.find("#trigger-container");
-                if ($(this).val() === "major") {
-                    triggerContainer.hide();
-                } else {
-                    triggerContainer.css("display", "flex");
-                }
-            });
+            // Securely attach the hide/show logic without using inline scripts
+            const severitySelect = html[0].querySelector("#severity");
+            const triggerContainer = html[0].querySelector("#trigger-container");
+
+            if (severitySelect && triggerContainer) {
+                severitySelect.addEventListener("change", function () {
+                    if (this.value === "major") {
+                        triggerContainer.style.display = "none";
+                    } else {
+                        triggerContainer.style.display = "flex";
+                    }
+                });
+            }
         },
         buttons: {
             roll: {
@@ -249,7 +221,6 @@ window.DetermineInjuryDialog = function () {
                     const severity = html.find("#severity").val();
                     const trigger = html.find("#trigger").val();
 
-                    // Fetch the relevant data based on selections
                     let categoryData;
                     if (severity === "major") {
                         categoryData = INJURY_DATA.major;
@@ -257,20 +228,26 @@ window.DetermineInjuryDialog = function () {
                         categoryData = INJURY_DATA.minor[trigger];
                     }
 
-                    // Evaluate the dice roll based on the category (default to 1d10)
                     const diceType = categoryData.dice || "1d10";
                     const roll = new Roll(diceType);
-                    await roll.evaluate({ async: true });
+                    await roll.evaluate();
 
                     const resultRow = categoryData.results[roll.total];
 
-                    // Check if target is valid
+                    let createdEffectItem = null;
+                    try {
+                        // 1. Always create the World Item first so we have it for the chat card!
+                        createdEffectItem = await getOrCreateInjuryEffect(resultRow, categoryData);
+                    } catch (error) {
+                        console.error("Error creating injury item in World:", error);
+                    }
+
                     if (!targetActor) {
-                        ui.notifications.warn("No token selected. Rolling injury to chat only.");
+                        ui.notifications.warn("No token selected. Rolling injury to chat only. You can drag and drop the effect from chat.");
                     } else {
-                        // Apply the mechanical logic
                         try {
-                            await applyInjuryEffect(targetActor, resultRow, categoryData);
+                            // 2. Apply it to the token if one is selected
+                            await applyInjuryEffect(targetActor, resultRow, createdEffectItem);
                             ui.notifications.info(`Applied injury: ${resultRow.name} to ${targetActor.name}.`);
                         } catch (error) {
                             console.error("Error applying injury effect:", error);
@@ -278,8 +255,8 @@ window.DetermineInjuryDialog = function () {
                         }
                     }
 
-                    // Output formatted chat
-                    await sendChatCard(roll, resultRow, categoryData.title, targetActor);
+                    // Output formatted chat (including the link to the item)
+                    await sendChatCard(roll, resultRow, categoryData.title, targetActor, createdEffectItem);
                 }
             },
             cancel: {
