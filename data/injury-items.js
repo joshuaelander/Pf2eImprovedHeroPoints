@@ -157,7 +157,7 @@ export function createPrebuiltInjuryItemData(injuryData, categoryData, folderId,
             level: { value: 0 },
             traits: { value: [] },
             tokenIcon: { show: true },
-            slug: foundry.utils.slugify(effectName)
+            slug: effectName.toLowerCase().replace(/\s+/g, "-").replace(/[^\w-]/g, "")
         }
     };
 }
