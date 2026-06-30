@@ -24,8 +24,25 @@ export async function getOrCreateInjuryEffect(injuryData, categoryData, actor = 
     const effectName = `Injury: ${injuryData.name}`;
     const effectData = createPrebuiltInjuryItemData(injuryData, categoryData, folder.id, effectName, Array.isArray(injuryData.rules) ? [...injuryData.rules] : []);
 
-    let worldItem = game.items.find(i => i.name === effectName && i.type === "effect" && i.folder === folder.id);
+    if (actor) {
+        const existingActorEffect = actor.items?.find(i => i.name === effectName && i.type === "effect" && i.flags?.["heroic-push-pf2e"]?.injuryName === injuryData.name);
+        if (existingActorEffect) {
+            return existingActorEffect;
+        }
 
+        const embeddedData = foundry.utils.deepClone(effectData);
+        delete embeddedData.folder;
+
+        try {
+            const [embeddedItem] = await actor.createEmbeddedDocuments("Item", [embeddedData], { renderSheet: false });
+            return embeddedItem;
+        } catch (err) {
+            console.error("Heroic Push | Failed to embed injury effect on actor:", err);
+            ui.notifications.error("Failed to apply injury effect to actor. See console for details.");
+        }
+    }
+
+    let worldItem = game.items.find(i => i.name === effectName && i.type === "effect" && i.folder?.id === folder.id);
     if (!worldItem) {
         try {
             if (typeof Item.createDocuments === "function") {
@@ -40,28 +57,6 @@ export async function getOrCreateInjuryEffect(injuryData, categoryData, actor = 
         } catch (err) {
             console.error("Heroic Push | Failed to create injury effect item:", err);
             ui.notifications.error("Failed to create injury effect item. See console for details.");
-            return null;
-        }
-    }
-
-    if (actor) {
-        const existingActorEffect = actor.items?.find(i => i.name === effectName && i.type === "effect" && i.flags?.["heroic-push-pf2e"]?.injuryName === injuryData.name);
-        if (existingActorEffect) {
-            return existingActorEffect;
-        }
-
-        const embeddedData = foundry.utils.deepClone(worldItem.toObject());
-        delete embeddedData._id;
-        delete embeddedData.folder;
-        delete embeddedData.sort;
-
-        try {
-            const [embeddedItem] = await actor.createEmbeddedDocuments("Item", [embeddedData], { renderSheet: false });
-            return embeddedItem;
-        } catch (err) {
-            console.error("Heroic Push | Failed to embed injury effect on actor:", err);
-            ui.notifications.error("Failed to apply injury effect to actor. See console for details.");
-            return worldItem;
         }
     }
 
