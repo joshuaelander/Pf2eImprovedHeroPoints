@@ -69,7 +69,10 @@ const PRESET_RULES = {
     "Mnemonic Strain": [],
     "Somatic Jitters": [],
     "Overloaded Senses": [],
-    "Blurred Focus": [],
+    "Blurred Focus": [
+        { key: "FlatModifier", selector: "spell-attack", value: -2, type: "status" },
+        { key: "FlatModifier", selector: "spell-dc", value: -2, type: "status" }
+    ],
     "Drained Vigor": [],
     "Arcane Static": [
         { key: "FlatModifier", selector: "perception", value: -2, type: "status" }
@@ -90,8 +93,12 @@ const PRESET_RULES = {
         { key: "FlatModifier", selector: "athletics", value: -2, type: "status" },
         { key: "FlatModifier", selector: "acrobatics", value: -2, type: "status" }
     ],
-    "Jumpy": [],
-    "Trembling Grip": [],
+    "Jumpy": [
+        { key: "FlatModifier", selector: "off-guard", value: 1, type: "condition" }
+    ],
+    "Trembling Grip": [
+        { key: "FlatModifier", selector: "attack", value: -2, type: "status" }
+    ],
     "Strained Back": [],
     "Twisted Joint": [],
     "Mild Concussion": [],
@@ -116,7 +123,9 @@ const PRESET_RULES = {
         { key: "FlatModifier", selector: "saving-throw", value: -1, type: "status", predicate: ["disease"] }
     ],
     "Numb Fingers": [],
-    "Lingering Wound": [],
+    "Lingering Wound": [
+        { key: "Resistance", type: "vitality", value: 2 }
+    ],
     "Internal Bleeding": [],
     "Shattered Resolve": [],
     "Lingering Trauma": [],
@@ -126,7 +135,16 @@ const PRESET_RULES = {
     "Damaged Eye": [],
     "Deep Laceration": [],
     "Torn Tendon": [],
-    "System Shock": []
+    "System Shock": [],
+    "Fumbled Gear": [
+        { key: "FlatModifier", selector: "attack", value: -2, type: "status" }
+    ],
+    "Weapon Recoil": [],
+    "Numb Grip": [],
+    "Bruised Rib": [],
+    "Thrown Off Balance": [],
+    "Strained Muscles": [],
+    "Emotional Damage": []
 };
 
 export function createPrebuiltInjuryItemData(injuryData, categoryData, folderId, effectName, extraRules = []) {

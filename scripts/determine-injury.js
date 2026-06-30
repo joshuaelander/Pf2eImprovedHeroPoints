@@ -125,7 +125,7 @@ window.DetermineInjuryDialog = async function () {
                 5: { name: "Severe Concussion", text: "You are stupefied 1 until Treat Wounds or Long Rest.", conditions: [{ slug: "stupefied", value: 1 }] },
                 6: { name: "Ruptured Eardrum", text: "You are deafened.", conditions: [{ slug: "deafened" }] },
                 7: { name: "Damaged Eye", text: "You are dazzled.", conditions: [{ slug: "dazzled" }] },
-                8: { name: "Deep Laceration", text: "You take 1d6 persistent bleed damage that ignores the flat check until Treat Wounds is used." },
+                8: { name: "Deep Laceration", text: "You take 1d6 persistent bleed damage that ignores the flat check until Treat Wounds is used or the target reaches 0 Hit Points." },
                 9: { name: "Torn Tendon", text: "You are clumsy 1 until Treat Wounds or Long Rest.", conditions: [{ slug: "clumsy", value: 1 }] },
                 10: { name: "System Shock", text: "You are slowed 1 until the end of combat.", conditions: [{ slug: "slowed", value: 1 }] }
             }
