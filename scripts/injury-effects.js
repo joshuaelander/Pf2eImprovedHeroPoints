@@ -21,44 +21,56 @@ export async function getOrCreateInjuryEffect(injuryData, categoryData, actor = 
         return null;
     }
 
+    console.log("Heroic Push | Folder found/created:", folder.id, folder.name);
+
     const effectName = `Injury: ${injuryData.name}`;
     const effectData = createPrebuiltInjuryItemData(injuryData, categoryData, folder.id, effectName, Array.isArray(injuryData.rules) ? [...injuryData.rules] : []);
 
-    if (actor) {
-        const existingActorEffect = actor.items?.find(i => i.name === effectName && i.type === "effect" && i.flags?.["heroic-push-pf2e"]?.injuryName === injuryData.name);
-        if (existingActorEffect) {
-            return existingActorEffect;
-        }
+    console.log("Heroic Push | Effect data created:", effectData);
 
-        const embeddedData = foundry.utils.deepClone(effectData);
-        delete embeddedData.folder;
-
-        try {
-            const [embeddedItem] = await actor.createEmbeddedDocuments("Item", [embeddedData], { renderSheet: false });
-            return embeddedItem;
-        } catch (err) {
-            console.error("Heroic Push | Failed to embed injury effect on actor:", err);
-            ui.notifications.error("Failed to apply injury effect to actor. See console for details.");
-        }
-    }
-
+    // Always create/find the world item first so drag links remain valid
     let worldItem = game.items.find(i => i.name === effectName && i.type === "effect" && i.folder?.id === folder.id);
+    console.log("Heroic Push | Searching for existing world item:", effectName, "Found:", !!worldItem);
+
     if (!worldItem) {
         try {
+            console.log("Heroic Push | Creating new world item...");
             if (typeof Item.createDocuments === "function") {
+                console.log("Heroic Push | Using Item.createDocuments");
                 const createdDocuments = await Item.createDocuments([effectData], { renderSheet: false });
                 worldItem = createdDocuments?.[0] ?? null;
             } else {
+                console.log("Heroic Push | Using Item.create");
                 worldItem = await Item.create(effectData, { renderSheet: false });
             }
             if (worldItem) {
-                console.log("Heroic Push | Created new injury effect item:", worldItem);
+                console.log("Heroic Push | Successfully created new injury effect item:", worldItem.id, worldItem.name);
+            } else {
+                console.warn("Heroic Push | Item creation returned null");
             }
         } catch (err) {
             console.error("Heroic Push | Failed to create injury effect item:", err);
             ui.notifications.error("Failed to create injury effect item. See console for details.");
         }
     }
+
+    // If an actor is provided, also embed a copy on the actor
+    if (actor && worldItem) {
+        const existingActorEffect = actor.items?.find(i => i.name === effectName && i.type === "effect" && i.flags?.["heroic-push-pf2e"]?.injuryName === injuryData.name);
+        if (!existingActorEffect) {
+            const embeddedData = foundry.utils.deepClone(effectData);
+            delete embeddedData.folder;
+
+            try {
+                await actor.createEmbeddedDocuments("Item", [embeddedData], { renderSheet: false });
+            } catch (err) {
+                console.error("Heroic Push | Failed to embed injury effect on actor:", err);
+            }
+        }
+    }
+
+    return worldItem;
+}
 
     return worldItem;
 }
