@@ -1,22 +1,24 @@
 {
   "id": "heroic-push-pf2e",
   "title": "PF2e Hero Point Remaster: Heroic Push",
-  "description": "Adds right-click options to PF2e chat messages to spend Hero Points for +1d6 (Heroic) or +2d6 (Reckless) pushes.",
-  "version": "1.2.1",
+  "description": "<p>Adds right-click options to PF2e chat messages to spend Hero Points for +1d6 (Heroic) or +2d6 (Reckless) pushes.</p>",
+  "version": "1.2.2",
   "compatibility": {
     "minimum": "13",
     "verified": "14"
   },
   "authors": [
     {
-      "name": "Aeneas"
+      "name": "Aeneas",
+      "flags": {}
     }
   ],
   "relationships": {
     "systems": [
       {
         "id": "pf2e",
-        "type": "system"
+        "type": "system",
+        "compatibility": {}
       }
     ]
   },
@@ -27,5 +29,32 @@
     "scripts/heroic-push.js",
     "scripts/determine-injury.js",
     "scripts/injury-effects.js"
-  ]
+  ],
+  "packs": [
+    {
+      "name": "heroic-push-items",
+      "label": "Heroic Push Items",
+      "path": "packs/heroic-push-items",
+      "type": "Item",
+      "ownership": {
+        "PLAYER": "OBSERVER",
+        "ASSISTANT": "OWNER"
+      },
+      "system": "pf2e",
+      "flags": {}
+    },
+    {
+      "name": "heroic-push-macros",
+      "label": "Heroic Push Macros",
+      "path": "packs/heroic-push-macros",
+      "type": "Macro",
+      "ownership": {
+        "PLAYER": "OBSERVER",
+        "ASSISTANT": "OWNER"
+      },
+      "system": "pf2e",
+      "flags": {}
+    }
+  ],
+  "flags": {}
 }
