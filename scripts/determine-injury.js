@@ -10,30 +10,30 @@ window.DetermineInjuryDialog = async function () {
                 title: "Minor Injury: Initiative",
                 durationRounds: 2,
                 results: {
-                    1: { name: "Pounding Ears", text: "You are deafened.", conditions: [{ slug: "deafened" }] },
+                    1: { name: "Pounding Ears", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.9PR9y0bi4JQWEz87]{Deafened}.", conditions: [{ slug: "deafened" }] },
                     2: { name: "Pulled Hamstring", text: "-5 foot penalty to all Speeds.", rules: [{ key: "FlatModifier", selector: "speed", value: -5, type: "status" }] },
-                    3: { name: "Hyperventilation", text: "You are fatigued.", conditions: [{ slug: "fatigued" }] },
+                    3: { name: "Hyperventilation", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.HL2l2VRSaQHu9lUq]{Fatigued}.", conditions: [{ slug: "fatigued" }] },
                     4: { name: "Tunnel Vision", text: "You take a -2 status penalty to Perception checks.", rules: [{ key: "FlatModifier", selector: "perception", value: -2, type: "status" }] },
                     5: { name: "Pre-combat Jitters", text: "You can't use reactions until the start of your second turn." },
-                    6: { name: "Tripped Up", text: "You are clumsy 1.", conditions: [{ slug: "clumsy", value: 1 }] },
+                    6: { name: "Tripped Up", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.i3OJZU2nk64Df3gE]{Clumsy 1}.", conditions: [{ slug: "clumsy", value: 1 }] },
                     7: { name: "Fumbled Gear", text: "You take a -2 to the first attack roll/spell attack roll of combat." },
-                    8: { name: "Strained Core", text: "You are enfeebled 1.", conditions: [{ slug: "enfeebled", value: 1 }] },
-                    9: { name: "Disoriented", text: "You are off-guard (flat-footed) to the first attack against you.", conditions: [{ slug: "off-guard" }] },
-                    10: { name: "Dizziness", text: "You are dazzled.", conditions: [{ slug: "dazzled" }] }
+                    8: { name: "Strained Core", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.MIRkyAjyBeXivMa7]{Enfeebled 1}.", conditions: [{ slug: "enfeebled", value: 1 }] },
+                    9: { name: "Disoriented", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.AJh5ex99aV6VTggg]{Off-Guard} to the first attack against you.", conditions: [{ slug: "off-guard" }] },
+                    10: { name: "Dizziness", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.tkI3YKEQBgWHBqap]{Dazzled}.", conditions: [{ slug: "dazzled" }] }
                 }
             },
             attacks: {
                 title: "Minor Injury: Attacks",
                 durationRounds: 2,
                 results: {
-                    1: { name: "Sprained Wrist", text: "You are enfeebled 1.", conditions: [{ slug: "enfeebled", value: 1 }] },
-                    2: { name: "Overextended", text: "You are off-guard (flat-footed).", conditions: [{ slug: "off-guard" }] },
-                    3: { name: "Weapon Recoil", text: "You take [X]d6 bludgeoning damage. (X = weapon damage dice)" },
-                    4: { name: "Re-open Wound", text: "You take [X]d4 persistent bleed damage. (X = weapon damage dice)" },
-                    5: { name: "Jarred Nerves", text: "You are clumsy 1.", conditions: [{ slug: "clumsy", value: 1 }] },
-                    6: { name: "Magical/Physical Feedback", text: "You are dazzled.", conditions: [{ slug: "dazzled" }] },
+                    1: { name: "Sprained Wrist", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.MIRkyAjyBeXivMa7]{Enfeebled 1}.", conditions: [{ slug: "enfeebled", value: 1 }] },
+                    2: { name: "Overextended", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.AJh5ex99aV6VTggg]{Off-Guard}.", conditions: [{ slug: "off-guard" }] },
+                    3: { name: "Weapon Recoil", text: "You take bludgeoning damage equal to the number of weapon damage dice × [[/r 1d6]]{1d6}." },
+                    4: { name: "Re-open Wound", text: "You take persistent bleed damage equal to the number of weapon damage dice × [[/r 1d4]]{1d4}." },
+                    5: { name: "Jarred Nerves", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.i3OJZU2nk64Df3gE]{Clumsy 1}.", conditions: [{ slug: "clumsy", value: 1 }] },
+                    6: { name: "Magical/Physical Feedback", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.tkI3YKEQBgWHBqap]{Dazzled}.", conditions: [{ slug: "dazzled" }] },
                     7: { name: "Numb Grip", text: "-2 status penalty to attack rolls with the weapon used. Can change grip for 1 action." },
-                    8: { name: "Bruised Rib", text: "Taking an action with the attack trait causes 2 * [X] piercing damage. (X = weapon damage dice)" },
+                    8: { name: "Bruised Rib", text: "Taking an action with the attack trait causes piercing damage equal to 2 × the number of weapon damage dice." },
                     9: { name: "Thrown Off Balance", text: "You are pushed 5 feet in a random direction." },
                     10: { name: "Strained Muscles", text: "You cannot use physical actions that cost 2 or more actions during your next turn." }
                 }
@@ -42,46 +42,46 @@ window.DetermineInjuryDialog = async function () {
                 title: "Minor Injury: Saving Throws",
                 durationRounds: 2,
                 results: {
-                    1: { name: "Bile and Nausea", text: "You are sickened 1.", conditions: [{ slug: "sickened", value: 1 }] },
-                    2: { name: "Wind Knocked Out", text: "You are enfeebled 1.", conditions: [{ slug: "enfeebled", value: 1 }] },
+                    1: { name: "Bile and Nausea", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.fesd1n5eVhpCSS18]{Sickened 1}.", conditions: [{ slug: "sickened", value: 1 }] },
+                    2: { name: "Wind Knocked Out", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.MIRkyAjyBeXivMa7]{Enfeebled 1}.", conditions: [{ slug: "enfeebled", value: 1 }] },
                     3: { name: "Twisted Ankle", text: "-5 foot penalty to your land Speed.", rules: [{ key: "FlatModifier", selector: "land-speed", value: -5, type: "status" }] },
-                    4: { name: "Concussive Rattle", text: "You are stupefied 1.", conditions: [{ slug: "stupefied", value: 1 }] },
-                    5: { name: "Emotional Damage", text: "You take 1d8 mental damage." },
-                    6: { name: "Dust in the Eyes", text: "You are blinded for 1 round, then dazzled.", conditions: [{ slug: "blinded" }] },
-                    7: { name: "Panic Response", text: "You are frightened 1.", conditions: [{ slug: "frightened", value: 1 }] },
+                    4: { name: "Concussive Rattle", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.e1XGnhKkWSiVjGGi]{Stupefied 1}.", conditions: [{ slug: "stupefied", value: 1 }] },
+                    5: { name: "Emotional Damage", text: "You take [[/r 1d8 #mental]]{1d8 mental damage}." },
+                    6: { name: "Dust in the Eyes", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.Xg6MU5mkb1Xm6h2O]{Blinded} for 1 round, then @UUID[Compendium.pf2e.conditionitems.Item.tkI3YKEQBgWHBqap]{Dazzled}.", conditions: [{ slug: "blinded" }] },
+                    7: { name: "Panic Response", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.TBSHQspnbcqxsmjL]{Frightened 1}.", conditions: [{ slug: "frightened", value: 1 }] },
                     8: { name: "Unnerved", text: "You cannot use reactions." },
                     9: { name: "Battered", text: "You gain weakness 2 to physical damage.", rules: [{ key: "Weakness", type: "physical", value: 2 }] },
-                    10: { name: "Dislocated Joint", text: "You are clumsy 1.", conditions: [{ slug: "clumsy", value: 1 }] }
+                    10: { name: "Dislocated Joint", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.i3OJZU2nk64Df3gE]{Clumsy 1}.", conditions: [{ slug: "clumsy", value: 1 }] }
                 }
             },
             skillChecks: {
                 title: "Minor Injury: Skill Checks",
                 durationRounds: 2,
                 results: {
-                    1: { name: "Frustration", text: "You are stupefied 1.", conditions: [{ slug: "stupefied", value: 1 }] },
+                    1: { name: "Frustration", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.e1XGnhKkWSiVjGGi]{Stupefied 1}.", conditions: [{ slug: "stupefied", value: 1 }] },
                     2: { name: "Muscle Spasm", text: "You take a -2 status penalty to Strength and Dexterity skills.", rules: [{ key: "FlatModifier", selector: "str-based", value: -2, type: "status" }, { key: "FlatModifier", selector: "dex-based", value: -2, type: "status" }] },
                     3: { name: "Migraine", text: "You take a -2 status penalty to Intelligence and Wisdom skills.", rules: [{ key: "FlatModifier", selector: "int-based", value: -2, type: "status" }, { key: "FlatModifier", selector: "wis-based", value: -2, type: "status" }] },
                     4: { name: "Trembling Hands", text: "Thievery and Crafting checks require an extra action or extra time." },
-                    5: { name: "Mental Exhaustion", text: "You are drained 1 for 10 minutes.", conditions: [{ slug: "drained", value: 1 }] },
+                    5: { name: "Mental Exhaustion", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.4D2KBtexWXa6oUMR]{Drained 1} for 10 minutes.", conditions: [{ slug: "drained", value: 1 }] },
                     6: { name: "Shortness of Breath", text: "You cannot speak above a whisper or use abilities requiring speech. (Can still cast spells though.)" },
                     7: { name: "Broken Tool", text: "A set of tools you are using takes damage or breaks entirely (GM decides)." },
                     8: { name: "Lingering Doubt", text: "You cannot critically succeed on skill checks." },
                     9: { name: "Social Faux Pas", text: "You take a -2 status penalty to Charisma skills.", rules: [{ key: "FlatModifier", selector: "cha-based", value: -2, type: "status" }] },
-                    10: { name: "Distracted", text: "You are fascinated by the object of your check.", conditions: [{ slug: "fascinated" }] }
+                    10: { name: "Distracted", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.AdPVz7rbaVSRxHFg]{Fascinated} by the object of your check.", conditions: [{ slug: "fascinated" }] }
                 }
             },
             spellAttacks: {
                 title: "Minor Injury: Spell Attacks",
                 durationRounds: 2,
                 results: {
-                    1: { name: "Magical Backlash", text: "You take [X]d4 force damage (no save) as the spell's energy recoils. (X = spell rank)" },
-                    2: { name: "Aetheric Burn", text: "You take [X] persistent force damage. (X = spell rank)" },
-                    3: { name: "Mnemonic Strain", text: "You are stupefied 1.", conditions: [{ slug: "stupefied", value: 1 }] },
-                    4: { name: "Somatic Jitters", text: "You are clumsy 1.", conditions: [{ slug: "clumsy", value: 1 }] },
-                    5: { name: "Overloaded Senses", text: "You are dazzled by the flash of magical energy.", conditions: [{ slug: "dazzled" }] },
+                    1: { name: "Magical Backlash", text: "You take flat force damage equal to the spell rank (no save) as the spell's energy recoils." },
+                    2: { name: "Aetheric Burn", text: "You take persistent force damage equal to the spell rank." },
+                    3: { name: "Mnemonic Strain", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.e1XGnhKkWSiVjGGi]{Stupefied 1}.", conditions: [{ slug: "stupefied", value: 1 }] },
+                    4: { name: "Somatic Jitters", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.i3OJZU2nk64Df3gE]{Clumsy 1}.", conditions: [{ slug: "clumsy", value: 1 }] },
+                    5: { name: "Overloaded Senses", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.tkI3YKEQBgWHBqap]{Dazzled} by the flash of magical energy.", conditions: [{ slug: "dazzled" }] },
                     6: { name: "Blurred Focus", text: "You take a -2 status penalty to spell attack rolls and spell DCs." },
-                    7: { name: "Disoriented", text: "You are off-guard (flat-footed).", conditions: [{ slug: "off-guard" }] },
-                    8: { name: "Drained Vigor", text: "The magic saps your physical strength; you are enfeebled 1.", conditions: [{ slug: "enfeebled", value: 1 }] },
+                    7: { name: "Disoriented", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.AJh5ex99aV6VTggg]{Off-Guard}.", conditions: [{ slug: "off-guard" }] },
+                    8: { name: "Drained Vigor", text: "The magic saps your physical strength; you are @UUID[Compendium.pf2e.conditionitems.Item.MIRkyAjyBeXivMa7]{Enfeebled 1}.", conditions: [{ slug: "enfeebled", value: 1 }] },
                     9: { name: "Arcane Static", text: "Ringing in your ears and floating sparks give you a -2 status penalty to Perception checks.", rules: [{ key: "FlatModifier", selector: "perception", value: -2, type: "status" }] },
                     10: { name: "Grounded Energy", text: "Your magic painfully anchors you to the earth; -5 foot penalty to all Speeds.", rules: [{ key: "FlatModifier", selector: "speed", value: -5, type: "status" }] }
                 }
@@ -95,15 +95,15 @@ window.DetermineInjuryDialog = async function () {
                     2: { name: "Stiff Leg", text: "-5 foot penalty to your land Speed.", rules: [{ key: "FlatModifier", selector: "land-speed", value: -5, type: "status" }] },
                     3: { name: "Minor Fatigue", text: "You take a -1 status penalty to all skill checks.", rules: [{ key: "FlatModifier", selector: "skill-check", value: -1, type: "status" }] },
                     4: { name: "Sore Muscles", text: "You take a -2 status penalty to Athletics and Acrobatics checks.", rules: [{ key: "FlatModifier", selector: "athletics", value: -2, type: "status" }, { key: "FlatModifier", selector: "acrobatics", value: -2, type: "status" }] },
-                    5: { name: "Jumpy", text: "You are off-guard (flat-footed) to the first attack against you in any combat." },
+                    5: { name: "Jumpy", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.AJh5ex99aV6VTggg]{Off-Guard} to the first attack against you in any combat." },
                     6: { name: "Trembling Grip", text: "You take a -2 penalty to the first attack roll of any combat." },
-                    7: { name: "Strained Back", text: "You are enfeebled 1.", conditions: [{ slug: "enfeebled", value: 1 }] },
-                    8: { name: "Twisted Joint", text: "You are clumsy 1.", conditions: [{ slug: "clumsy", value: 1 }] },
-                    9: { name: "Mild Concussion", text: "You are stupefied 1.", conditions: [{ slug: "stupefied", value: 1 }] },
+                    7: { name: "Strained Back", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.MIRkyAjyBeXivMa7]{Enfeebled 1}.", conditions: [{ slug: "enfeebled", value: 1 }] },
+                    8: { name: "Twisted Joint", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.i3OJZU2nk64Df3gE]{Clumsy 1}.", conditions: [{ slug: "clumsy", value: 1 }] },
+                    9: { name: "Mild Concussion", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.e1XGnhKkWSiVjGGi]{Stupefied 1}.", conditions: [{ slug: "stupefied", value: 1 }] },
                     10: { name: "Bruised Rib", text: "Taking an action with the attack trait causes 1 piercing damage." },
                     11: { name: "Dazed", text: "You take a -2 status penalty to Initiative rolls.", rules: [{ key: "FlatModifier", selector: "initiative", value: -2, type: "status" }] },
                     12: { name: "Aches and Pains", text: "You gain weakness 1 to all physical damage.", rules: [{ key: "Weakness", type: "physical", value: 1 }] },
-                    13: { name: "Sensitive Eyes", text: "You are dazzled in areas of bright light." },
+                    13: { name: "Sensitive Eyes", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.tkI3YKEQBgWHBqap]{Dazzled} in areas of bright light." },
                     14: { name: "Short of Breath", text: "You take a -1 status penalty to Fortitude saves.", rules: [{ key: "FlatModifier", selector: "fortitude", value: -1, type: "status" }] },
                     15: { name: "Slow Reflexes", text: "You take a -1 status penalty to Reflex saves.", rules: [{ key: "FlatModifier", selector: "reflex", value: -1, type: "status" }] },
                     16: { name: "Shaken", text: "You take a -1 status penalty to Will saves.", rules: [{ key: "FlatModifier", selector: "will", value: -1, type: "status" }] },
@@ -118,16 +118,16 @@ window.DetermineInjuryDialog = async function () {
             title: "Major Injury",
             durationRounds: null,
             results: {
-                1: { name: "Internal Bleeding", text: "You are drained 1.", conditions: [{ slug: "drained", value: 1 }] },
-                2: { name: "Shattered Resolve", text: "You are doomed 1.", conditions: [{ slug: "doomed", value: 1 }] },
-                3: { name: "Lingering Trauma", text: "You are wounded 1.", conditions: [{ slug: "wounded", value: 1 }] },
-                4: { name: "Fractured Limb", text: "You are enfeebled 1 until Treat Wounds or Long Rest.", conditions: [{ slug: "enfeebled", value: 1 }] },
-                5: { name: "Severe Concussion", text: "You are stupefied 1 until Treat Wounds or Long Rest.", conditions: [{ slug: "stupefied", value: 1 }] },
-                6: { name: "Ruptured Eardrum", text: "You are deafened.", conditions: [{ slug: "deafened" }] },
-                7: { name: "Damaged Eye", text: "You are dazzled.", conditions: [{ slug: "dazzled" }] },
-                8: { name: "Deep Laceration", text: "You take 1d6 persistent bleed damage that ignores the flat check until Treat Wounds is used or the target reaches 0 Hit Points." },
-                9: { name: "Torn Tendon", text: "You are clumsy 1 until Treat Wounds or Long Rest.", conditions: [{ slug: "clumsy", value: 1 }] },
-                10: { name: "System Shock", text: "You are slowed 1 until the end of combat.", conditions: [{ slug: "slowed", value: 1 }] }
+                1: { name: "Internal Bleeding", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.4D2KBtexWXa6oUMR]{Drained 1}.", conditions: [{ slug: "drained", value: 1 }] },
+                2: { name: "Shattered Resolve", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.3uh1r86TzbQvosrx]{Doomed 1}.", conditions: [{ slug: "doomed", value: 1 }] },
+                3: { name: "Lingering Trauma", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.fIvkRpjwaEKTD7hF]{Wounded 1}.", conditions: [{ slug: "wounded", value: 1 }] },
+                4: { name: "Fractured Limb", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.MIRkyAjyBeXivMa7]{Enfeebled 1} until Treat Wounds or Long Rest.", conditions: [{ slug: "enfeebled", value: 1 }] },
+                5: { name: "Severe Concussion", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.e1XGnhKkWSiVjGGi]{Stupefied 1} until Treat Wounds or Long Rest.", conditions: [{ slug: "stupefied", value: 1 }] },
+                6: { name: "Ruptured Eardrum", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.9PR9y0bi4JQWEz87]{Deafened}.", conditions: [{ slug: "deafened" }] },
+                7: { name: "Damaged Eye", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.tkI3YKEQBgWHBqap]{Dazzled}.", conditions: [{ slug: "dazzled" }] },
+                8: { name: "Deep Laceration", text: "You take [[/r 1d6]]{1d6} persistent bleed damage that ignores the flat check until Treat Wounds is used or the target reaches 0 Hit Points." },
+                9: { name: "Torn Tendon", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.i3OJZU2nk64Df3gE]{Clumsy 1} until Treat Wounds or Long Rest.", conditions: [{ slug: "clumsy", value: 1 }] },
+                10: { name: "System Shock", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.xYTAsEpcJE1Ccni3]{Slowed 1} until the end of combat.", conditions: [{ slug: "slowed", value: 1 }] }
             }
         }
     };

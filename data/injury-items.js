@@ -216,13 +216,19 @@ const PRESET_RULES = {
     "Damaged Eye": [],
     "Deep Laceration": [
         {
-            key: "GrantItem",
-            uuid: "Compendium.pf2e.conditionitems.Item.lDVqvLKA6eF3Df60",
-            inMemoryOnly: true,
-            alterations: [
-                { mode: "override", property: "system.persistent.damageType", value: "bleed" },
-                { mode: "override", property: "system.persistent.formula", value: "1d6" },
-                { mode: "override", property: "system.persistent.dc", value: 20 }
+            "key": "GrantItem",
+            "uuid": "Compendium.pf2e.conditionitems.Item.lDVqvLKA6eF3Df60",
+            "inMemoryOnly": true,
+            "alterations": [
+                {
+                    "mode": "override",
+                    "property": "persistent-damage",
+                    "value": {
+                        "formula": "1d6",
+                        "damageType": "bleed",
+                        "dc": 20
+                    }
+                }
             ]
         },
         {
