@@ -63,7 +63,7 @@ window.DetermineInjuryDialog = async function () {
                     3: { name: "Migraine", text: "You take a -2 status penalty to Intelligence and Wisdom skills.", rules: [{ key: "FlatModifier", selector: "int-based", value: -2, type: "status" }, { key: "FlatModifier", selector: "wis-based", value: -2, type: "status" }] },
                     4: { name: "Trembling Hands", text: "Thievery and Crafting checks require an extra action or extra time." },
                     5: { name: "Mental Exhaustion", text: "You are drained 1 for 10 minutes.", conditions: [{ slug: "drained", value: 1 }] },
-                    6: { name: "Short of Breath", text: "You cannot speak above a whisper or use abilities requiring speech. (Can still cast spells though.)" },
+                    6: { name: "Shortness of Breath", text: "You cannot speak above a whisper or use abilities requiring speech. (Can still cast spells though.)" },
                     7: { name: "Broken Tool", text: "A set of tools you are using takes damage or breaks entirely (GM decides)." },
                     8: { name: "Lingering Doubt", text: "You cannot critically succeed on skill checks." },
                     9: { name: "Social Faux Pas", text: "You take a -2 status penalty to Charisma skills.", rules: [{ key: "FlatModifier", selector: "cha-based", value: -2, type: "status" }] },
