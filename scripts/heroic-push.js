@@ -200,14 +200,16 @@ async function doHeroicPush(message, diceString) {
             const macroName = "Determine Injury";
             const injuryMacro = game.macros.getName(macroName);
 
-            if (injuryMacro) {
+            // Prefer calling the function directly so we can pass the exact actor who triggered the push, 
+            // bypassing the need for them to have their token selected.
+            if (typeof window.DetermineInjuryDialog === "function") {
+                ui.notifications.info(`Injury sustained! Time to determine injury...`);
+                window.DetermineInjuryDialog(msgActor);
+            } else if (injuryMacro) {
                 ui.notifications.info(`Injury sustained! Time to ${macroName}...`);
                 injuryMacro.execute();
-            } else if (typeof window.DetermineInjuryDialog === "function") {
-                ui.notifications.info(`Injury sustained! Time to determine injury...`);
-                window.DetermineInjuryDialog();
             } else {
-                ui.notifications.warn(`Could not find the macro named "${macroName}". Please run it manually to apply the injury.`);
+                ui.notifications.warn(`Could not find the function or macro to determine injury.`);
             }
         }
     }

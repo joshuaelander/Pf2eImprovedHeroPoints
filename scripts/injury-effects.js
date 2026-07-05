@@ -15,52 +15,55 @@ export async function getInjuryFolder() {
 }
 
 export async function getOrCreateInjuryEffect(injuryData, categoryData, actor = null) {
-    const folder = await getInjuryFolder();
-    if (!folder) {
-        ui.notifications.error("Could not find or create the Heroic Push Injuries folder.");
-        return null;
-    }
-
+    let folder = await getInjuryFolder();
+    
+    // Players might not have permission to create folders, so folder might be null.
+    // That's OK! We can still create the embedded item on their actor.
+    
     const effectName = `Injury: ${injuryData.name}`;
-    const effectData = createPrebuiltInjuryItemData(injuryData, categoryData, folder.id, effectName, Array.isArray(injuryData.rules) ? [...injuryData.rules] : []);
+    const effectData = createPrebuiltInjuryItemData(injuryData, categoryData, folder ? folder.id : null, effectName, Array.isArray(injuryData.rules) ? [...injuryData.rules] : []);
 
+    let embeddedItem = null;
     if (actor) {
         const existingActorEffect = actor.items?.find(i => i.name === effectName && i.type === "effect" && i.flags?.["heroic-push-pf2e"]?.injuryName === injuryData.name);
         if (existingActorEffect) {
-            return existingActorEffect;
-        }
-
-        const embeddedData = foundry.utils.deepClone(effectData);
-        delete embeddedData.folder;
-
-        try {
-            const [embeddedItem] = await actor.createEmbeddedDocuments("Item", [embeddedData], { renderSheet: false });
-            return embeddedItem;
-        } catch (err) {
-            console.error("Heroic Push | Failed to embed injury effect on actor:", err);
-            ui.notifications.error("Failed to apply injury effect to actor. See console for details.");
+            embeddedItem = existingActorEffect;
+        } else {
+            const embeddedData = foundry.utils.deepClone(effectData);
+            delete embeddedData.folder; // Embedded items don't go in sidebar folders
+            try {
+                const [created] = await actor.createEmbeddedDocuments("Item", [embeddedData], { renderSheet: false });
+                embeddedItem = created;
+            } catch (err) {
+                console.error("Heroic Push | Failed to embed injury effect on actor:", err);
+                ui.notifications.error("Failed to apply injury effect to actor. See console for details.");
+            }
         }
     }
 
-    let worldItem = game.items.find(i => i.name === effectName && i.type === "effect" && i.folder?.id === folder.id);
-    if (!worldItem) {
-        try {
-            if (typeof Item.createDocuments === "function") {
-                const createdDocuments = await Item.createDocuments([effectData], { renderSheet: false });
-                worldItem = createdDocuments?.[0] ?? null;
-            } else {
-                worldItem = await Item.create(effectData, { renderSheet: false });
+    // Try to get or create a World Item so the chat link is universally draggable, even if the actor deletes the effect.
+    let worldItem = null;
+    if (game.user.isGM) {
+        worldItem = game.items.find(i => i.name === effectName && i.type === "effect" && i.folder?.id === folder?.id);
+        if (!worldItem) {
+            try {
+                if (typeof Item.createDocuments === "function") {
+                    const createdDocuments = await Item.createDocuments([effectData], { renderSheet: false });
+                    worldItem = createdDocuments?.[0] ?? null;
+                } else {
+                    worldItem = await Item.create(effectData, { renderSheet: false });
+                }
+            } catch (err) {
+                console.error("Heroic Push | Failed to create injury effect world item:", err);
             }
-            if (worldItem) {
-                console.log("Heroic Push | Created new injury effect item:", worldItem);
-            }
-        } catch (err) {
-            console.error("Heroic Push | Failed to create injury effect item:", err);
-            ui.notifications.error("Failed to create injury effect item. See console for details.");
         }
+    } else {
+        // If they are a player, they might still be able to find an existing world item created previously by the GM.
+        worldItem = game.items.find(i => i.name === effectName && i.type === "effect");
     }
 
-    return worldItem;
+    // Return the world item if available (better for dragging), otherwise the embedded item.
+    return worldItem || embeddedItem;
 }
 
 export async function applyInjuryEffect(actor, injuryData, effectItem) {

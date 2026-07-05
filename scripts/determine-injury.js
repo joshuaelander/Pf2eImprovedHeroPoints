@@ -1,8 +1,8 @@
 import { getOrCreateInjuryEffect, applyInjuryEffect } from "./injury-effects.js";
 
-window.DetermineInjuryDialog = async function () {
+window.DetermineInjuryDialog = async function (preSelectedActor = null) {
     // Ensure we have a target to apply effects to
-    const targetActor = canvas.tokens.controlled[0]?.actor || game.user.character;
+    const targetActor = preSelectedActor || canvas.tokens.controlled[0]?.actor || game.user.character;
 
     const INJURY_DATA = {
         minor: {
