@@ -162,9 +162,25 @@ window.DetermineInjuryDialog = async function () {
         const actorName = actor ? actor.name : "An unknown creature";
         const durationText = categoryTitle.includes("Minor") ? "2 Rounds (or 10 mins out of combat)" : "Until Long Rest / Treat Wounds";
 
+        let text = injuryResult.text;
+
+        // Dynamically resolve condition UUIDs to ensure they are correct
+        const pack = game.packs.get("pf2e.conditionitems");
+        if (pack) {
+            const index = await pack.getIndex();
+            text = text.replace(/@UUID\[Compendium\.pf2e\.conditionitems\.Item\.[^\]]+\]\{([^}]+)\}/g, (match, name) => {
+                const baseName = name.replace(/\s+\d+$/, ''); // e.g., "Clumsy 1" -> "Clumsy"
+                const entry = index.find(e => e.name.toLowerCase() === baseName.toLowerCase());
+                if (entry) {
+                    return `@UUID[${entry.uuid}]{${name}}`;
+                }
+                return match;
+            });
+        }
+
         // Highlight variables like [X] for visual clarity
-        const formattedText = injuryResult.text.replace(/\[X\]/g, '<strong><span style="color: red; font-size: 1.1em;">X</span></strong>');
-        const draggableLink = effectItem?.uuid ? `<div style="margin-top: 10px; padding: 5px; background: rgba(0,0,0,0.1); border-radius: 3px; text-align: center;"><strong>Drag to apply:</strong><br>@UUID[${effectItem.uuid}]</div>` : "";
+        const formattedText = text.replace(/\[X\]/g, '<strong><span style="color: red; font-size: 1.1em;">X</span></strong>');
+        const draggableLink = effectItem?.uuid ? `<div style="margin-top: 10px; padding: 5px; background: rgba(0,0,0,0.1); border-radius: 3px; text-align: center;">@UUID[${effectItem.uuid}]</div>` : "";
 
         const content = `
             <div class="pf2e chat-card" style="border: 1px solid #191813; border-radius: 4px; padding: 5px;">
@@ -184,10 +200,12 @@ window.DetermineInjuryDialog = async function () {
             </div>
         `;
 
+        const enrichedContent = await TextEditor.enrichHTML(content, { async: true, rollData: actor?.getRollData() });
+
         await ChatMessage.create({
             user: game.user.id,
             speaker: ChatMessage.getSpeaker({ actor: actor }),
-            content: content,
+            content: enrichedContent,
             sound: CONFIG.sounds.dice
         });
     }
