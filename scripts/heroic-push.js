@@ -1,6 +1,24 @@
 Hooks.once('init', () => {
     console.log("Heroic Push PF2e | Initializing module");
 
+    game.settings.register("heroic-push-pf2e", "enableHeroicPush", {
+        name: "Enable Heroic Push (+1d6)",
+        hint: "Shows the Heroic Push option in the right-click menu for chat messages.",
+        scope: "world",
+        config: true,
+        type: Boolean,
+        default: true
+    });
+
+    game.settings.register("heroic-push-pf2e", "enableRecklessPush", {
+        name: "Enable Reckless Push (+2d6)",
+        hint: "Shows the Reckless Push option in the right-click menu for chat messages.",
+        scope: "world",
+        config: true,
+        type: Boolean,
+        default: true
+    });
+
     // Helper function to build the options
     const injectMenuOptions = (options) => {
         const getMsg = (li) => {
@@ -31,21 +49,30 @@ Hooks.once('init', () => {
             }
         };
 
-        // We use unshift to put our options at the TOP of the right-click menu
-        options.unshift(
-            {
+        const newOptions = [];
+        
+        if (game.settings.get("heroic-push-pf2e", "enableHeroicPush")) {
+            newOptions.push({
                 name: "Reroll with Heroic Push (+1d6)",
                 icon: '<i class="fas fa-dice-d6" style="color: #4a8a2a;"></i>',
                 condition: canPush,
                 callback: li => doHeroicPush(getMsg(li), "1d6")
-            },
-            {
+            });
+        }
+        
+        if (game.settings.get("heroic-push-pf2e", "enableRecklessPush")) {
+            newOptions.push({
                 name: "Reroll with Reckless Push (+2d6)",
                 icon: '<i class="fas fa-biohazard" style="color: #cc0000;"></i>',
                 condition: canPush,
                 callback: li => doHeroicPush(getMsg(li), "2d6")
-            }
-        );
+            });
+        }
+
+        // We use unshift to put our options at the TOP of the right-click menu
+        if (newOptions.length > 0) {
+            options.unshift(...newOptions);
+        }
     };
 
     Hooks.on("getChatMessageContextOptions", (app, options) => {

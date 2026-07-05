@@ -103,7 +103,7 @@ window.DetermineInjuryDialog = async function () {
                     10: { name: "Bruised Rib", text: "Taking an action with the attack trait causes 1 piercing damage." },
                     11: { name: "Dazed", text: "You take a -2 status penalty to Initiative rolls.", rules: [{ key: "FlatModifier", selector: "initiative", value: -2, type: "status" }] },
                     12: { name: "Aches and Pains", text: "You gain weakness 1 to all physical damage.", rules: [{ key: "Weakness", type: "physical", value: 1 }] },
-                    13: { name: "Sensitive Eyes", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.tkI3YKEQBgWHBqap]{Dazzled} in areas of bright light." },
+                    13: { name: "Sensitive Eyes", text: "You are @UUID[Compendium.pf2e.conditionitems.Item.tkI3YKEQBgWHBqap]{Dazzled} in areas of bright light.", conditions: [{ slug: "dazzled" }] },
                     14: { name: "Short of Breath", text: "You take a -1 status penalty to Fortitude saves.", rules: [{ key: "FlatModifier", selector: "fortitude", value: -1, type: "status" }] },
                     15: { name: "Slow Reflexes", text: "You take a -1 status penalty to Reflex saves.", rules: [{ key: "FlatModifier", selector: "reflex", value: -1, type: "status" }] },
                     16: { name: "Shaken", text: "You take a -1 status penalty to Will saves.", rules: [{ key: "FlatModifier", selector: "will", value: -1, type: "status" }] },
