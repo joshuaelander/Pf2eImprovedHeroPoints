@@ -1,4 +1,4 @@
-# Pf2eImprovedHeroPoints
+# Pf2e Improved Hero Points
 Overview: A more fun alternative to Hero Points which keeps the core the same, adds extra die rolls to reduce the feel bad moments and allows users to risk injury for greater success. Links directly to existing chat messages via right clicking on the card. There are also some added macros for injury checks if you wish to roll them separately.
 
 If you'd like you can help support me over on Patreon to see this and many other fun tools, maps, etc related to PF2e. Linked here: https://patreon.com/AeneasPF2e
