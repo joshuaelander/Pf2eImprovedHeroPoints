@@ -19,6 +19,24 @@ Hooks.once('init', () => {
         default: true
     });
 
+    game.settings.register("heroic-push-pf2e", "minorInjuryThreshold", {
+        name: "Minor Injury Threshold (%)",
+        hint: "The maximum d100 roll that results in an injury. Rolls between (Major Injury Threshold + 1) and this value result in a Minor Injury. Rolls above this value result in No Injury. (Default: 33, giving a 33% overall injury chance).",
+        scope: "world",
+        config: true,
+        type: Number,
+        default: 33
+    });
+
+    game.settings.register("heroic-push-pf2e", "majorInjuryThreshold", {
+        name: "Major Injury Threshold (%)",
+        hint: "The maximum d100 roll that results in a Major Injury. Rolls from 1 up to this value result in a Major Injury. (Default: 5, giving a 5% chance).",
+        scope: "world",
+        config: true,
+        type: Number,
+        default: 5
+    });
+
     // Helper function to build the options
     const injectMenuOptions = (options) => {
         const getMsg = (li) => {
@@ -165,23 +183,32 @@ async function doHeroicPush(message, diceString) {
 
         const injuryRoll = new Roll("1d100");
         await injuryRoll.evaluate();
-        let resultTitle, resultColor, tableRollText, icon;
 
-        if (injuryRoll.total >= 34) {
+        const rawMinor = Number(game.settings.get("heroic-push-pf2e", "minorInjuryThreshold"));
+        const rawMajor = Number(game.settings.get("heroic-push-pf2e", "majorInjuryThreshold"));
+        const minorThreshold = Math.min(Math.max(Number.isFinite(rawMinor) ? rawMinor : 33, 0), 100);
+        const majorThreshold = Math.min(Math.max(Number.isFinite(rawMajor) ? rawMajor : 5, 0), 100);
+
+        let resultTitle, resultColor, tableRollText, icon;
+        let severity = null;
+
+        if (injuryRoll.total <= majorThreshold) {
+            severity = "major";
+            resultTitle = "Major Injury!!!";
+            resultColor = "#cc0000"; // Red
+            icon = "fa-skull-crossbones";
+            tableRollText = "The hero suffered a Major Injury! Rolling for consequence...";
+        } else if (injuryRoll.total <= minorThreshold) {
+            severity = "minor";
+            resultTitle = "Minor Injury!";
+            resultColor = "#d08000"; // Orange
+            icon = "fa-user-injured";
+            tableRollText = "The hero suffered a Minor Injury. Rolling for consequence...";
+        } else {
             resultTitle = "No Injury";
             resultColor = "#4a8a2a"; // Green
             icon = "fa-check-circle";
             tableRollText = "The hero pushed through safely.";
-        } else if (injuryRoll.total >= 6) {
-            resultTitle = "Minor Injury!";
-            resultColor = "#d08000"; // Orange
-            icon = "fa-user-injured";
-            tableRollText = `The hero suffered a Minor Injury. Rolling for consequence...`;
-        } else {
-            resultTitle = "Major Injury!!!";
-            resultColor = "#cc0000"; // Red
-            icon = "fa-skull-crossbones";
-            tableRollText = `The hero suffered a Major Injury! Rolling for consequence...`;
         }
 
         await ChatMessage.create({
@@ -196,7 +223,7 @@ async function doHeroicPush(message, diceString) {
                 </div>`
         });
 
-        if (injuryRoll.total < 34) {
+        if (severity) {
             const macroName = "Determine Injury";
             const injuryMacro = game.macros.getName(macroName);
 
@@ -204,7 +231,7 @@ async function doHeroicPush(message, diceString) {
             // bypassing the need for them to have their token selected.
             if (typeof window.DetermineInjuryDialog === "function") {
                 ui.notifications.info(`Injury sustained! Time to determine injury...`);
-                window.DetermineInjuryDialog(msgActor);
+                window.DetermineInjuryDialog(msgActor, severity);
             } else if (injuryMacro) {
                 ui.notifications.info(`Injury sustained! Time to ${macroName}...`);
                 injuryMacro.execute();

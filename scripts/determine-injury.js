@@ -1,6 +1,6 @@
 import { getOrCreateInjuryEffect, applyInjuryEffect } from "./injury-effects.js";
 
-window.DetermineInjuryDialog = async function (preSelectedActor = null) {
+window.DetermineInjuryDialog = async function (preSelectedActor = null, defaultSeverity = "minor") {
     // Ensure we have a target to apply effects to
     const targetActor = preSelectedActor || canvas.tokens.controlled[0]?.actor || game.user.character;
 
@@ -132,6 +132,7 @@ window.DetermineInjuryDialog = async function (preSelectedActor = null) {
         }
     };
 
+    const isMajorDefault = defaultSeverity === "major";
     const dialogHtml = `
     <div style="margin-bottom: 10px;">
         <p>Select the severity and trigger to determine the injury. Requires a selected token to apply effects automatically.</p>
@@ -140,11 +141,11 @@ window.DetermineInjuryDialog = async function (preSelectedActor = null) {
         <div class="form-group">
             <label for="severity"><strong>Severity:</strong></label>
             <select id="severity" name="severity">
-                <option value="minor">Minor Injury</option>
-                <option value="major">Major Injury</option>
+                <option value="minor"${isMajorDefault ? "" : " selected"}>Minor Injury</option>
+                <option value="major"${isMajorDefault ? " selected" : ""}>Major Injury</option>
             </select>
         </div>
-        <div class="form-group" id="trigger-container">
+        <div class="form-group" id="trigger-container"${isMajorDefault ? ' style="display: none;"' : ""}>
             <label for="trigger"><strong>Trigger:</strong></label>
             <select id="trigger" name="trigger">
                 <option value="initiative">Initiative</option>
