@@ -2,12 +2,12 @@ import { createPrebuiltInjuryItemData } from "../data/injury-items.js";
 
 export async function getInjuryFolder() {
     // Find or create a dedicated folder in the Items tab for our injuries
-    let folder = game.folders.find(f => f.type === "Item" && f.name === "Heroic Push Injuries");
+    let folder = game.folders.find(f => f.type === "Item" && (f.name === "PF2e Awesome Hero Point Injuries" || f.name === "Heroic Push Injuries"));
     if (!folder) {
         try {
-            folder = await Folder.create({ name: "Heroic Push Injuries", type: "Item", color: "#cc0000" });
+            folder = await Folder.create({ name: "PF2e Awesome Hero Point Injuries", type: "Item", color: "#cc0000" });
         } catch (err) {
-            console.error("Heroic Push | Failed to create injury folder:", err);
+            console.error("PF2e Awesome Hero Point Rework | Failed to create injury folder:", err);
             return null;
         }
     }
@@ -16,10 +16,10 @@ export async function getInjuryFolder() {
 
 export async function getOrCreateInjuryEffect(injuryData, categoryData, actor = null) {
     let folder = await getInjuryFolder();
-    
+
     // Players might not have permission to create folders, so folder might be null.
     // That's OK! We can still create the embedded item on their actor.
-    
+
     const effectName = `Injury: ${injuryData.name}`;
     const effectData = createPrebuiltInjuryItemData(injuryData, categoryData, folder ? folder.id : null, effectName, Array.isArray(injuryData.rules) ? [...injuryData.rules] : []);
 
@@ -35,7 +35,7 @@ export async function getOrCreateInjuryEffect(injuryData, categoryData, actor = 
                 const [created] = await actor.createEmbeddedDocuments("Item", [embeddedData], { renderSheet: false });
                 embeddedItem = created;
             } catch (err) {
-                console.error("Heroic Push | Failed to embed injury effect on actor:", err);
+                console.error("PF2e Awesome Hero Point Rework | Failed to embed injury effect on actor:", err);
                 ui.notifications.error("Failed to apply injury effect to actor. See console for details.");
             }
         }
@@ -54,7 +54,7 @@ export async function getOrCreateInjuryEffect(injuryData, categoryData, actor = 
                     worldItem = await Item.create(effectData, { renderSheet: false });
                 }
             } catch (err) {
-                console.error("Heroic Push | Failed to create injury effect world item:", err);
+                console.error("PF2e Awesome Hero Point Rework | Failed to create injury effect world item:", err);
             }
         }
     } else {
@@ -74,7 +74,7 @@ export async function applyInjuryEffect(actor, injuryData, effectItem) {
             try {
                 await actor.increaseCondition(cond.slug, { value: cond.value });
             } catch (err) {
-                console.warn(`Heroic Push | Could not apply condition ${cond.slug}:`, err);
+                console.warn(`PF2e Awesome Hero Point Rework | Could not apply condition ${cond.slug}:`, err);
             }
         }
     }
@@ -89,7 +89,7 @@ export async function applyInjuryEffect(actor, injuryData, effectItem) {
             try {
                 await actor.createEmbeddedDocuments("Item", [effectData], { renderSheet: false });
             } catch (err) {
-                console.error("Heroic Push | Failed to embed injury effect on actor:", err);
+                console.error("PF2e Awesome Hero Point Rework | Failed to embed injury effect on actor:", err);
                 ui.notifications.error("Failed to apply injury effect to actor. See console for details.");
             }
         }

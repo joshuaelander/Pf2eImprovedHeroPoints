@@ -1,5 +1,5 @@
 Hooks.once('init', () => {
-    console.log("Heroic Push PF2e | Initializing module");
+    console.log("PF2e Awesome Hero Point Rework | Initializing module");
 
     game.settings.register("heroic-push-pf2e", "enableHeroicPush", {
         name: "Enable Heroic Push (+1d6)",
@@ -62,7 +62,7 @@ Hooks.once('init', () => {
 
                 return Boolean(isRoll && msgActor.isOwner && hp > 0 && isNotDamage);
             } catch (err) {
-                console.error("Heroic Push Condition Error:", err);
+                console.error("PF2e Awesome Hero Point Rework | Push Condition Error:", err);
                 return false;
             }
         };
