@@ -5,7 +5,7 @@ Hooks.once("init", () => {
 
     game.settings.register("heroic-push-pf2e", "enableHeroicPush", {
         name: "Enable Heroic Push (+1d6)",
-        hint: "Shows the Heroic Push option in the right-click menu for chat messages.",
+        hint: "Shows the Heroic Push option in the right-click menu for chat messages and the combat tracker.",
         scope: "world",
         config: true,
         type: Boolean,
@@ -14,7 +14,7 @@ Hooks.once("init", () => {
 
     game.settings.register("heroic-push-pf2e", "enableRecklessPush", {
         name: "Enable Reckless Push (+2d6)",
-        hint: "Shows the Reckless Push option in the right-click menu for chat messages.",
+        hint: "Shows the Reckless Push option in the right-click menu for chat messages and the combat tracker.",
         scope: "world",
         config: true,
         type: Boolean,
@@ -51,7 +51,9 @@ Hooks.once("init", () => {
     // Expose public API
     const api = {
         doHeroicPush,
+        doHeroicPushCombatant,
         findLastPushableMessage,
+        findInitiativeMessage,
         pushLastRoll,
         heroicPushLast,
         recklessPushLast,
@@ -62,20 +64,46 @@ Hooks.once("init", () => {
         isPushableMessage,
         detectInjuryTrigger,
         getCheckDisplayName,
-        getMacroFolder
+        getMacroFolder,
+        updateCombatantInitiative,
+        getCombatantFromElement
     };
 
     game.modules.get("heroic-push-pf2e").api = api;
     game.heroicPush = api;
     window.HeroicPush = api;
 
-    // Register Context Menu Options
+    // Register Context Menu Options for Chat Messages
     Hooks.on("getChatMessageContextOptions", (app, options) => {
         injectMenuOptions(options);
+    });
+
+    // Register Context Menu Options for Combat Tracker (Initiative)
+    Hooks.on("getCombatTrackerEntryContext", (appOrHtml, entryOptions) => {
+        injectCombatTrackerOptions(appOrHtml, entryOptions);
     });
 });
 
 Hooks.once("ready", async () => {
+    // Socket listener for player-triggered initiative updates handled on GM client
+    game.socket.on("module.heroic-push-pf2e", async (data) => {
+        if (!game.user.isGM) return;
+        if (data?.action === "updateInitiative" && data.combatantId) {
+            let combatant = game.combat?.combatants.get(data.combatantId);
+            if (!combatant && game.combats) {
+                for (const c of game.combats) {
+                    if (c.combatants.has(data.combatantId)) {
+                        combatant = c.combatants.get(data.combatantId);
+                        break;
+                    }
+                }
+            }
+            if (combatant) {
+                await combatant.update({ initiative: data.initiative });
+            }
+        }
+    });
+
     if (game.user.isGM && game.settings.get("heroic-push-pf2e", "autoCreateMacros")) {
         await ensureModuleMacros();
     }
@@ -95,6 +123,28 @@ export function getMessageFromElement(li) {
         || targetEl.getAttribute?.("data-entry-id")
         || targetEl.getAttribute?.("data-document-id");
     return game.messages.get(id) || null;
+}
+
+/**
+ * Universal helper to extract a Combatant from a Combat Tracker DOM element
+ */
+export function getCombatantFromElement(li) {
+    const element = li instanceof HTMLElement ? li : (li?.[0] || li);
+    if (!element) return null;
+    const targetEl = element.closest ? (element.closest("[data-combatant-id], .combatant") || element) : element;
+    const id = targetEl.dataset?.combatantId 
+        || targetEl.getAttribute?.("data-combatant-id")
+        || targetEl.dataset?.entryId 
+        || targetEl.dataset?.documentId;
+    if (id) {
+        if (game.combat?.combatants.has(id)) {
+            return game.combat.combatants.get(id);
+        }
+        for (const c of game.combats) {
+            if (c.combatants.has(id)) return c.combatants.get(id);
+        }
+    }
+    return null;
 }
 
 /**
@@ -172,7 +222,7 @@ export function isPushableMessage(message, user = game.user) {
 }
 
 /**
- * Context menu injection
+ * Chat Message Context Menu injection
  */
 function injectMenuOptions(options) {
     const canPush = (li) => {
@@ -197,6 +247,50 @@ function injectMenuOptions(options) {
             icon: '<i class="fas fa-biohazard" style="color: #cc0000;"></i>',
             condition: canPush,
             callback: li => doHeroicPush(getMessageFromElement(li), "2d6")
+        });
+    }
+
+    if (newOptions.length > 0) {
+        options.unshift(...newOptions);
+    }
+}
+
+/**
+ * Combat Tracker (Initiative) Context Menu injection
+ */
+function injectCombatTrackerOptions(appOrHtml, entryOptions) {
+    const options = Array.isArray(entryOptions) ? entryOptions : (Array.isArray(appOrHtml) ? appOrHtml : null);
+    if (!options) return;
+
+    const canPushCombatant = (li) => {
+        const combatant = getCombatantFromElement(li);
+        if (!combatant) return false;
+        if (!Number.isFinite(combatant.initiative)) return false;
+
+        const actor = combatant.actor;
+        if (!actor) return false;
+
+        const isOwner = game.user.isGM || actor.isOwner || (game.user.character?.id === actor.id);
+        return Boolean(isOwner);
+    };
+
+    const newOptions = [];
+
+    if (game.settings.get("heroic-push-pf2e", "enableHeroicPush")) {
+        newOptions.push({
+            name: "Reroll with Heroic Push (+1d6)",
+            icon: '<i class="fas fa-dice-d6" style="color: #4a8a2a;"></i>',
+            condition: canPushCombatant,
+            callback: li => doHeroicPushCombatant(li, "1d6")
+        });
+    }
+
+    if (game.settings.get("heroic-push-pf2e", "enableRecklessPush")) {
+        newOptions.push({
+            name: "Reroll with Reckless Push (+2d6)",
+            icon: '<i class="fas fa-biohazard" style="color: #cc0000;"></i>',
+            condition: canPushCombatant,
+            callback: li => doHeroicPushCombatant(li, "2d6")
         });
     }
 
@@ -371,6 +465,175 @@ export function findLastPushableMessage(options = {}) {
     }
 
     return null;
+}
+
+/**
+ * Searches chat history backwards to find the most recent initiative roll for an actor
+ */
+export function findInitiativeMessage(actor) {
+    if (!actor) return null;
+    const messages = game.messages.contents;
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i];
+        if (!hasD20Roll(msg)) continue;
+        if (msg.flags?.["heroic-push-pf2e"]?.isInjuryRoll) continue;
+
+        const isInit = Boolean(
+            msg.flags?.core?.initiativeRoll
+            || msg.flags?.pf2e?.context?.type === "initiative"
+            || msg.flags?.pf2e?.context?.domains?.includes("initiative")
+            || (msg.flavor && msg.flavor.toLowerCase().includes("initiative"))
+        );
+        if (!isInit) continue;
+
+        const msgActor = getMessageActor(msg);
+        if (msgActor?.id === actor.id) {
+            return msg;
+        }
+    }
+    return null;
+}
+
+/**
+ * Safely updates a combatant's initiative score, using socket delegation if caller lacks permission
+ */
+export async function updateCombatantInitiative(combatant, newTotal) {
+    if (!combatant) return;
+
+    // Preserve PF2e tie-breaker decimal modifier if present
+    const oldInit = combatant.initiative;
+    let finalInitiative = newTotal;
+    if (Number.isFinite(oldInit) && (oldInit % 1 !== 0) && Number.isInteger(newTotal)) {
+        const decimal = oldInit % 1;
+        finalInitiative = Number((newTotal + decimal).toFixed(2));
+    }
+
+    if (game.user.isGM) {
+        await combatant.update({ initiative: finalInitiative });
+    } else {
+        try {
+            await combatant.update({ initiative: finalInitiative });
+        } catch (err) {
+            game.socket.emit("module.heroic-push-pf2e", {
+                action: "updateInitiative",
+                combatantId: combatant.id,
+                initiative: finalInitiative
+            });
+        }
+    }
+}
+
+/**
+ * Pushes initiative directly from the Combat Tracker context menu
+ */
+export async function doHeroicPushCombatant(li, diceString = "1d6") {
+    const combatant = getCombatantFromElement(li);
+    if (!combatant) return ui.notifications.error("Could not find the combatant in the tracker.");
+
+    const actor = combatant.actor;
+    if (!actor) return ui.notifications.error("No actor linked to that combatant.");
+
+    const canControl = game.user.isGM || actor.isOwner || (game.user.character?.id === actor.id);
+    if (!canControl) return ui.notifications.warn("You do not have permission to push this character's rolls.");
+
+    const hp = actor.system?.resources?.heroPoints?.value ?? 0;
+    if (hp < 1) return ui.notifications.warn(`${actor.name} does not have enough Hero Points!`);
+
+    // 1. Try to find the actual initiative chat message first
+    const initMsg = findInitiativeMessage(actor);
+    if (initMsg) {
+        return doHeroicPush(initMsg, diceString);
+    }
+
+    // 2. Fallback if no chat message exists in history: push combatant initiative directly
+    await actor.update({ "system.resources.heroPoints.value": hp - 1 });
+
+    const currentInit = combatant.initiative ?? 10;
+    const pushRoll = new Roll(`1d20 + ${diceString}[Heroic Push]`);
+    await pushRoll.evaluate();
+
+    const pushFlavor = diceString === "1d6" ? "(No Injury)" : "(Chance of Injury)";
+    const pushTitle = diceString === "1d6" ? "Heroic Push (+1d6)!" : "Reckless Push (+2d6)!";
+
+    await updateCombatantInitiative(combatant, pushRoll.total);
+    ui.notifications.info(`Updated ${actor.name}'s initiative to ${pushRoll.total}!`);
+
+    await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor, token: combatant.token }),
+        rolls: [pushRoll],
+        flags: {
+            "core": { initiativeRoll: true },
+            "pf2e": { context: { type: "initiative" } },
+            "heroic-push-pf2e": { isPushedRoll: true, pushType: diceString }
+        },
+        flavor: `
+            <div class="pf2e chat-card heroic-push-card">
+                <header class="card-header flexrow" style="align-items: center; padding-bottom: 5px;">
+                    <img src="${actor.img || 'icons/svg/mystery-man.svg'}" title="${actor.name}" width="36" height="36" style="border: none; margin-right: 8px;"/>
+                    <h3 style="margin: 0; line-height: normal;">${pushTitle} <br><span style="font-size: 0.8em; color: #555;">${pushFlavor}</span></h3>
+                </header>
+                <div class="card-content" style="margin-top: 5px; margin-bottom: 5px;">
+                    <p style="margin: 0 0 5px 0;"><strong>${actor.name}</strong> spent 1 Hero Point to push Initiative to <strong>${pushRoll.total}</strong>!</p>
+                </div>
+            </div>`
+    });
+
+    if (diceString === "2d6") {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        const injuryRoll = new Roll("1d100");
+        await injuryRoll.evaluate();
+
+        const rawMinor = Number(game.settings.get("heroic-push-pf2e", "minorInjuryThreshold"));
+        const rawMajor = Number(game.settings.get("heroic-push-pf2e", "majorInjuryThreshold"));
+        const minorThreshold = Math.min(Math.max(Number.isFinite(rawMinor) ? rawMinor : 33, 0), 100);
+        const majorThreshold = Math.min(Math.max(Number.isFinite(rawMajor) ? rawMajor : 5, 0), 100);
+
+        let resultTitle, resultColor, tableRollText, icon;
+        let severity = null;
+
+        if (injuryRoll.total <= majorThreshold) {
+            severity = "major";
+            resultTitle = "Major Injury!!!";
+            resultColor = "#cc0000";
+            icon = "fa-skull-crossbones";
+            tableRollText = "The hero suffered a Major Injury! Rolling for consequence...";
+        } else if (injuryRoll.total <= minorThreshold) {
+            severity = "minor";
+            resultTitle = "Minor Injury!";
+            resultColor = "#d08000";
+            icon = "fa-user-injured";
+            tableRollText = "The hero suffered a Minor Injury. Rolling for consequence...";
+        } else {
+            resultTitle = "No Injury";
+            resultColor = "#4a8a2a";
+            icon = "fa-check-circle";
+            tableRollText = "The hero pushed through safely.";
+        }
+
+        await ChatMessage.create({
+            speaker: ChatMessage.getSpeaker({ actor, token: combatant.token }),
+            rolls: [injuryRoll],
+            flags: {
+                "heroic-push-pf2e": { isInjuryRoll: true, severity }
+            },
+            flavor: `
+                <div style="background: rgba(0,0,0,0.05); border: 2px solid ${resultColor}; padding: 8px; border-radius: 5px; text-align: center; margin-bottom: 5px;">
+                    <h4 style="color: ${resultColor}; margin: 0 0 5px 0; font-size: 1.2em; border-bottom: 1px solid ${resultColor}; padding-bottom: 3px;">
+                        <i class="fas ${icon}"></i> <strong>${resultTitle}</strong>
+                    </h4>
+                    <p style="margin: 0; font-size: 1.1em;">${tableRollText}</p>
+                </div>`
+        });
+
+        if (severity) {
+            if (typeof determineInjuryDialog === "function") {
+                determineInjuryDialog(actor, severity, "initiative");
+            } else if (typeof window.DetermineInjuryDialog === "function") {
+                window.DetermineInjuryDialog(actor, severity, "initiative");
+            }
+        }
+    }
 }
 
 /**
@@ -621,6 +884,43 @@ export async function doHeroicPush(message, diceString = "1d6") {
     foundry.utils.setProperty(msgData.flags, "heroic-push-pf2e.originalMessageId", message.id);
 
     await ChatMessage.create(msgData);
+
+    // Check if this was an initiative roll and update combat tracker automatically
+    const isInitiative = Boolean(
+        message.flags?.core?.initiativeRoll
+        || message.flags?.pf2e?.context?.type === "initiative"
+        || message.flags?.pf2e?.context?.domains?.includes("initiative")
+        || (message.flavor && message.flavor.toLowerCase().includes("initiative"))
+    );
+
+    if (isInitiative) {
+        let combatant = null;
+        if (game.combat) {
+            combatant = game.combat.combatants.find(c => {
+                if (message.speaker?.token && c.tokenId === message.speaker.token) return true;
+                if (c.actorId === msgActor.id) return true;
+                return false;
+            });
+        }
+        if (!combatant && game.combats) {
+            for (const c of game.combats) {
+                const found = c.combatants.find(cb => {
+                    if (message.speaker?.token && cb.tokenId === message.speaker.token) return true;
+                    if (cb.actorId === msgActor.id) return true;
+                    return false;
+                });
+                if (found) {
+                    combatant = found;
+                    break;
+                }
+            }
+        }
+
+        if (combatant) {
+            await updateCombatantInitiative(combatant, newRoll.total);
+            ui.notifications.info(`Updated ${msgActor.name}'s initiative to ${newRoll.total}!`);
+        }
+    }
 
     // Reckless Push injury roll
     if (diceString === "2d6") {

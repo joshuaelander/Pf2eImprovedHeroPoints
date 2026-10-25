@@ -4,9 +4,10 @@ A more fun alternative to Hero Points for the Pathfinder 2e system. Instead of s
 
 ## How It Works
 
-You can spend a Hero Point in two convenient ways:
-1. **Right-Click Context Menu:** Right-click on any eligible check, attack roll, or saving throw chat message.
-2. **Hotbar Macros / API:** Run the auto-generated macros or hotkey shortcuts to instantly push your last d20 roll!
+You can spend a Hero Point in three convenient ways:
+1. **Right-Click Chat Messages:** Right-click on any eligible check, attack roll, saving throw, or initiative chat message.
+2. **Right-Click Combat Tracker:** Right-click directly on any combatant in the Initiative / Combat Tracker to push their initiative!
+3. **Hotbar Macros / API:** Run the auto-generated macros or hotkey shortcuts to instantly push your last d20 roll!
 
 ### Heroic Push (+1d6)
 * Adds +1d6 to the existing roll total.
