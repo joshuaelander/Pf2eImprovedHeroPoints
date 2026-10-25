@@ -1,0 +1,41 @@
+/* PF2e Awesome Hero Point Rework Styles */
+
+.heroic-push-card .card-header h3 {
+    font-family: var(--font-primary, "Signika", sans-serif);
+    font-weight: 700;
+}
+
+/* Dialog styling */
+.pf2e-heroic-push-dialog {
+    font-family: var(--font-primary, "Signika", sans-serif);
+}
+
+.pf2e-heroic-push-dialog .push-info-card {
+    background: #181d29 !important;
+    border: 2px solid #3d4663 !important;
+    border-radius: 8px !important;
+    padding: 12px !important;
+    margin-bottom: 12px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45) !important;
+}
+
+/* Form input dark theme protection as per v14 guide */
+.pf2e-heroic-push-dialog input[type="text"],
+.pf2e-heroic-push-dialog input[type="number"],
+.pf2e-heroic-push-dialog select,
+#determine-injury-dialog select,
+#determine-injury-dialog input {
+    background: #202433 !important;
+    color: #ffffff !important;
+    border: 1px solid #3d4663 !important;
+    border-radius: 4px;
+    padding: 4px 8px;
+}
+
+.pf2e-heroic-push-dialog input:focus,
+.pf2e-heroic-push-dialog select:focus,
+#determine-injury-dialog select:focus {
+    border-color: #d4af37 !important;
+    box-shadow: 0 0 6px rgba(212, 175, 55, 0.4) !important;
+    outline: none !important;
+}

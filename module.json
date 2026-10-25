@@ -1,8 +1,8 @@
 {
   "id": "heroic-push-pf2e",
   "title": "PF2e Awesome Hero Point Rework",
-  "description": "<p>Adds right-click options to PF2e chat messages to spend Hero Points for +1d6 (Heroic) or +2d6 (Reckless) pushes with configurable injury consequences.</p>",
-  "version": "1.3.5",
+  "description": "<p>Revamps PF2e Hero Points with Heroic (+1d6) and Reckless (+2d6 with injury risk) pushes via chat right-click and macros to push your last roll.</p>",
+  "version": "1.4.0",
   "compatibility": {
     "minimum": "13",
     "verified": "14"
@@ -29,6 +29,9 @@
     "scripts/heroic-push.js",
     "scripts/determine-injury.js",
     "scripts/injury-effects.js"
+  ],
+  "styles": [
+    "styles/heroic-push.css"
   ],
   "packs": [
     {

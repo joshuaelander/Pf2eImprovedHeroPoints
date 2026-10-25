@@ -1,10 +1,12 @@
 # PF2e Awesome Hero Point Rework
 
-A more fun alternative to Hero Points for the Pathfinder 2e system. Instead of standard rerolls that can still be worse than the original roll, players can spend a Hero Point directly on a chat card to add bonus dice to their roll, with an option to push even harder at the risk of taking an injury. If an injury is triggered, the Determine Injury dialog will pop up to resolve it. Other alternatives often just add 10 to the roll, but that's boring and often a bit too powerful. This adds more risk and reward to spending hero points.
+A more fun alternative to Hero Points for the Pathfinder 2e system. Instead of standard rerolls that can still be worse than the original roll, players can spend a Hero Point directly on a chat card (or via hotbar macro) to add bonus dice to their roll, with an option to push even harder at the risk of taking an injury. If an injury is triggered, the Determine Injury dialog pops up to resolve it. Other alternatives often just add 10 to the roll, but that's boring and often a bit too powerful. This adds more risk and reward to spending hero points.
 
 ## How It Works
 
-Right-click on any eligible check, attack roll, or saving throw chat message to spend 1 Hero Point.
+You can spend a Hero Point in two convenient ways:
+1. **Right-Click Context Menu:** Right-click on any eligible check, attack roll, or saving throw chat message.
+2. **Hotbar Macros / API:** Run the auto-generated macros or hotkey shortcuts to instantly push your last d20 roll!
 
 ### Heroic Push (+1d6)
 * Adds +1d6 to the existing roll total.
@@ -19,11 +21,35 @@ Right-click on any eligible check, attack roll, or saving throw chat message to 
   * **Major Injury (1-5):** Applies a lingering injury (like Drained, Doomed, or Wounded) that lasts longer, sometimes until the player takes a long rest.
 * Sustaining an injury pops up the Determine Injury dialog pre-selected with the rolled severity so you can roll and apply the effect to the character.
 
+## Included Macros & Module API
+
+The module automatically creates and manages world macros in the Macro directory with Observer permissions so players can easily drag them to their hotbar:
+
+* **Heroic Push (Last Roll):** Instantly pushes your character's last d20 roll with +1d6.
+* **Reckless Push (Last Roll):** Instantly pushes your character's last d20 roll with +2d6 and rolls for injury.
+* **PF2e Awesome Hero Points: Push Last Roll:** Displays a prompt showing your character's Hero Points, the last roll's score, and buttons to choose Heroic or Reckless push.
+* **Determine Injury:** Opens the interactive injury rolling and effect application dialog.
+
+### Scripting API
+You can also trigger these directly in custom macros:
+```javascript
+// Quick Prompt Dialog
+game.heroicPush.pushLastDialog();
+
+// 1-Click Pushes
+game.heroicPush.heroicPushLast();
+game.heroicPush.recklessPushLast();
+
+// Push a specific message
+game.heroicPush.doHeroicPush(message, "1d6");
+```
+
 ## Game Settings
 
 In Configure Settings > Module Settings, GMs can:
 * Enable or disable Heroic Push and Reckless Push individually.
 * Adjust the d100 threshold values for Minor and Major injuries to tune the injury chances for your group.
+* Toggle auto-creation of World macros.
 
 ## Included Packs
 

@@ -1,6 +1,6 @@
 import { getOrCreateInjuryEffect, applyInjuryEffect } from "./injury-effects.js";
 
-window.DetermineInjuryDialog = async function (preSelectedActor = null, defaultSeverity = "minor") {
+export async function determineInjuryDialog(preSelectedActor = null, defaultSeverity = "minor", defaultTrigger = "attacks") {
     // Ensure we have a target to apply effects to
     const targetActor = preSelectedActor || canvas.tokens.controlled[0]?.actor || game.user.character;
 
@@ -148,12 +148,12 @@ window.DetermineInjuryDialog = async function (preSelectedActor = null, defaultS
         <div class="form-group" id="trigger-container"${isMajorDefault ? ' style="display: none;"' : ""}>
             <label for="trigger"><strong>Trigger:</strong></label>
             <select id="trigger" name="trigger">
-                <option value="initiative">Initiative</option>
-                <option value="attacks">Attacks</option>
-                <option value="savingThrows">Saving Throws</option>
-                <option value="skillChecks">Skill Checks</option>
-                <option value="spellAttacks">Spell Attacks</option>
-                <option value="woundedRecovery">Wounded Recovery (d20)</option>
+                <option value="initiative"${defaultTrigger === "initiative" ? " selected" : ""}>Initiative</option>
+                <option value="attacks"${defaultTrigger === "attacks" ? " selected" : ""}>Attacks</option>
+                <option value="savingThrows"${defaultTrigger === "savingThrows" ? " selected" : ""}>Saving Throws</option>
+                <option value="skillChecks"${defaultTrigger === "skillChecks" ? " selected" : ""}>Skill Checks</option>
+                <option value="spellAttacks"${defaultTrigger === "spellAttacks" ? " selected" : ""}>Spell Attacks</option>
+                <option value="woundedRecovery"${defaultTrigger === "woundedRecovery" ? " selected" : ""}>Wounded Recovery (d20)</option>
             </select>
         </div>
     </form>
@@ -215,9 +215,9 @@ window.DetermineInjuryDialog = async function (preSelectedActor = null, defaultS
         title: "Determine Injury",
         content: dialogHtml,
         render: (html) => {
-            // Securely attach the hide/show logic without using inline scripts
-            const severitySelect = html[0].querySelector("#severity");
-            const triggerContainer = html[0].querySelector("#trigger-container");
+            const root = html instanceof HTMLElement ? html : (html?.[0] || html);
+            const severitySelect = root?.querySelector ? root.querySelector("#severity") : html.find?.("#severity")?.[0];
+            const triggerContainer = root?.querySelector ? root.querySelector("#trigger-container") : html.find?.("#trigger-container")?.[0];
 
             if (severitySelect && triggerContainer) {
                 severitySelect.addEventListener("change", function () {
@@ -234,8 +234,9 @@ window.DetermineInjuryDialog = async function (preSelectedActor = null, defaultS
                 icon: '<i class="fas fa-dice-d20"></i>',
                 label: "Roll Injury",
                 callback: async (html) => {
-                    const severity = html.find("#severity").val();
-                    const trigger = html.find("#trigger").val();
+                    const root = html instanceof HTMLElement ? html : (html?.[0] || html);
+                    const severity = (root?.querySelector ? root.querySelector("#severity")?.value : html.find?.("#severity")?.val()) || "minor";
+                    const trigger = (root?.querySelector ? root.querySelector("#trigger")?.value : html.find?.("#trigger")?.val()) || "attacks";
 
                     let categoryData;
                     if (severity === "major") {
@@ -281,4 +282,7 @@ window.DetermineInjuryDialog = async function (preSelectedActor = null, defaultS
         },
         default: "roll"
     }).render(true);
-};
+}
+
+// Global window compatibility
+window.DetermineInjuryDialog = determineInjuryDialog;
