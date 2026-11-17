@@ -24,11 +24,10 @@ You can spend a Hero Point in three convenient ways:
 
 ## Included Macros & Module API
 
-The module automatically creates and manages world macros in the Macro directory with Observer permissions so players can easily drag them to their hotbar:
+The module automatically creates and manages world macros in the **PF2e Awesome Hero Point Rework** folder in the Macro directory with Observer permissions so players can easily drag them to their hotbar:
 
-* **Heroic Push (Last Roll):** Instantly pushes your character's last d20 roll with +1d6.
-* **Reckless Push (Last Roll):** Instantly pushes your character's last d20 roll with +2d6 and rolls for injury.
-* **PF2e Awesome Hero Points: Push Last Roll:** Displays a prompt showing your character's Hero Points, the last roll's score, and buttons to choose Heroic or Reckless push.
+* **Hero Point Last Roll:** Displays a prompt showing your character's Hero Points, the last roll's score, and buttons to choose Heroic (+1d6) or Reckless (+2d6) push.
+* **Injury Check:** Checks the selected character's Wounded value and rolls a d100 recovery check (Major Injury: 5%, Minor Injury: 23% + 10% per Wounded level). Automatically clears the Wounded condition afterward and opens Determine Injury on Wounded Recovery if an injury is sustained.
 * **Determine Injury:** Opens the interactive injury rolling and effect application dialog.
 
 ### Scripting API
@@ -36,6 +35,9 @@ You can also trigger these directly in custom macros:
 ```javascript
 // Quick Prompt Dialog
 game.heroicPush.pushLastDialog();
+
+// Wounded Recovery Injury Check
+game.heroicPush.injuryCheck();
 
 // 1-Click Pushes
 game.heroicPush.heroicPushLast();

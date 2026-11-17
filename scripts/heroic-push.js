@@ -1,7 +1,8 @@
 import { determineInjuryDialog } from "./determine-injury.js";
+import { injuryCheckDialog, getActorWoundedValue, removeWoundedConditions } from "./injury-check.js";
 
 Hooks.once("init", () => {
-    console.log("PF2e Awesome Hero Point Rework | Initializing module v1.4.0");
+    console.log("PF2e Awesome Hero Point Rework | Initializing module v1.5.0");
 
     game.settings.register("heroic-push-pf2e", "enableHeroicPush", {
         name: "Enable Heroic Push (+1d6)",
@@ -23,7 +24,7 @@ Hooks.once("init", () => {
 
     game.settings.register("heroic-push-pf2e", "autoCreateMacros", {
         name: "Auto-Create World Macros for Players",
-        hint: "Automatically ensures Heroic Push, Reckless Push, and Push Prompt macros exist in the World Macros directory for easy hotbar dragging.",
+        hint: "Automatically ensures Hero Point Last Roll, Injury Check, and Determine Injury macros exist in the World Macros directory for easy hotbar dragging.",
         scope: "world",
         config: true,
         type: Boolean,
@@ -58,7 +59,10 @@ Hooks.once("init", () => {
         heroicPushLast,
         recklessPushLast,
         pushLastDialog,
+        injuryCheck: (actor) => injuryCheckDialog(actor),
         openDetermineInjury: (actor, severity, trigger) => determineInjuryDialog(actor, severity, trigger),
+        getActorWoundedValue,
+        removeWoundedConditions,
         getMessageActor,
         hasD20Roll,
         isPushableMessage,
@@ -1015,23 +1019,32 @@ async function ensureModuleMacros() {
     const folder = await getMacroFolder();
     const folderId = folder ? folder.id : null;
 
+    // Remove deprecated single-push macros if they were auto-created by this module
+    const deprecatedNames = ["Heroic Push (Last Roll)", "Reckless Push (Last Roll)"];
+    for (const oldName of deprecatedNames) {
+        const deprecated = game.macros.find(m => m.name === oldName && m.flags?.["heroic-push-pf2e"]?.isManaged);
+        if (deprecated) {
+            try {
+                await deprecated.delete();
+                console.log(`PF2e Awesome Hero Point Rework | Removed deprecated macro: ${oldName}`);
+            } catch (err) {
+                console.warn(`PF2e Awesome Hero Point Rework | Could not remove deprecated macro ${oldName}:`, err);
+            }
+        }
+    }
+
     const macrosToManage = [
         {
-            name: "Heroic Push (Last Roll)",
-            command: `game.modules.get("heroic-push-pf2e")?.api?.heroicPushLast();`,
-            img: "icons/sundries/gaming/dice-pair-white-green.webp",
-            type: "script"
-        },
-        {
-            name: "Reckless Push (Last Roll)",
-            command: `game.modules.get("heroic-push-pf2e")?.api?.recklessPushLast();`,
-            img: "icons/magic/fire/flame-burning-skull-orange.webp",
-            type: "script"
-        },
-        {
-            name: "PF2e Awesome Hero Points: Push Last Roll",
+            name: "Hero Point Last Roll",
+            legacyNames: ["PF2e Awesome Hero Points: Push Last Roll"],
             command: `game.modules.get("heroic-push-pf2e")?.api?.pushLastDialog();`,
             img: "icons/commodities/currency/coin-embossed-star-gold.webp",
+            type: "script"
+        },
+        {
+            name: "Injury Check",
+            command: `game.modules.get("heroic-push-pf2e")?.api?.injuryCheck();`,
+            img: "icons/skills/wounds/injury-stitched-flesh-red.webp",
             type: "script"
         },
         {
@@ -1043,11 +1056,18 @@ async function ensureModuleMacros() {
     ];
 
     for (const macroData of macrosToManage) {
+        const { legacyNames = [], ...createData } = macroData;
         let existing = game.macros.find(m => m.name === macroData.name);
+
+        // Rename legacy managed macro in-place if new name doesn't exist yet
+        if (!existing && legacyNames.length > 0) {
+            existing = game.macros.find(m => legacyNames.includes(m.name) && m.flags?.["heroic-push-pf2e"]?.isManaged);
+        }
+
         if (!existing) {
             try {
                 await Macro.create({
-                    ...macroData,
+                    ...createData,
                     folder: folderId,
                     ownership: { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.OBSERVER },
                     flags: { "heroic-push-pf2e": { isManaged: true } }
@@ -1057,8 +1077,9 @@ async function ensureModuleMacros() {
                 console.warn(`PF2e Awesome Hero Point Rework | Could not create macro ${macroData.name}:`, err);
             }
         } else {
-            // Update image, command, and ensure folder membership
+            // Update name, image, command, and ensure folder membership
             const updates = {};
+            if (existing.name !== macroData.name) updates.name = macroData.name;
             if (existing.command !== macroData.command) updates.command = macroData.command;
             if (existing.img !== macroData.img) updates.img = macroData.img;
             if (folderId && existing.folder?.id !== folderId) updates.folder = folderId;
@@ -1068,6 +1089,18 @@ async function ensureModuleMacros() {
             if (Object.keys(updates).length > 0) {
                 await existing.update(updates);
                 console.log(`PF2e Awesome Hero Point Rework | Updated macro: ${macroData.name}`);
+            }
+
+            // Clean up any leftover duplicate legacy macro
+            for (const oldName of legacyNames) {
+                const leftover = game.macros.find(m => m.name === oldName && m.id !== existing.id && m.flags?.["heroic-push-pf2e"]?.isManaged);
+                if (leftover) {
+                    try {
+                        await leftover.delete();
+                    } catch (err) {
+                        console.warn(`PF2e Awesome Hero Point Rework | Could not remove legacy macro ${oldName}:`, err);
+                    }
+                }
             }
         }
     }
