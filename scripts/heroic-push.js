@@ -1,5 +1,5 @@
 import { determineInjuryDialog } from "./determine-injury.js";
-import { MODULE_ID, clampPercent, resolveDomRoot, canControlActor } from "./injury-effects.js";
+import { MODULE_ID, clampPercent, resolveDomRoot, canControlActor, getWeaponDamageDice } from "./injury-effects.js";
 import {
     injuryCheckDialog,
     getActorWoundedValue,
@@ -83,7 +83,7 @@ Hooks.once("init", () => {
         recklessPushLast,
         pushLastDialog,
         injuryCheck: (actor) => injuryCheckDialog(actor),
-        openDetermineInjury: (actor, severity, trigger) => determineInjuryDialog(actor, severity, trigger),
+        openDetermineInjury: (actor, severity, trigger, sourceMessage) => determineInjuryDialog(actor, severity, trigger, sourceMessage),
         getActorWoundedValue,
         removeWoundedConditions,
         getMessageActor,
@@ -137,6 +137,94 @@ Hooks.once("ready", async () => {
 
     if (game.user.isGM && game.settings.get(MODULE_ID, "autoCreateMacros")) {
         await ensureModuleMacros();
+    }
+});
+
+Hooks.on("createChatMessage", async (message) => {
+    if (message.author?.id !== game.user.id) return;
+    if (message.flags?.[MODULE_ID]?.isInjuryRoll || message.flags?.[MODULE_ID]?.isBruisedRibDamage || message.flags?.[MODULE_ID]?.isPushedRoll) return;
+
+    const context = message.flags?.pf2e?.context;
+    const type = String(context?.type || "").toLowerCase();
+    if (!context || type.includes("damage")) return;
+
+    const actor = getMessageActor(message);
+    if (!actor || !canControlActor(actor)) return;
+
+    const isAttackRoll = type === "attack-roll" || type === "spell-attack-roll";
+    const traits = (context.traits || []).map(t => String(t).toLowerCase());
+    const options = (context.options || []).map(o => String(o).toLowerCase());
+    const hasAttackTrait = isAttackRoll
+        || traits.includes("attack")
+        || options.some(o => o === "item:trait:attack" || o === "action:trait:attack" || o === "self:action:trait:attack");
+
+    if (hasAttackTrait) {
+        const bruisedRib = actor.items?.find(i => i.type === "effect" && i.flags?.[MODULE_ID]?.injuryName === "Bruised Rib");
+        if (bruisedRib) {
+            const isRecoveryVersion = bruisedRib.flags?.[MODULE_ID]?.category === "Minor Injury: Wounded Recovery";
+            const weaponDice = isRecoveryVersion ? null : getWeaponDamageDice(message, actor);
+            const damageAmount = isRecoveryVersion ? 1 : (weaponDice ?? 1) * 2;
+            const scaleHint = isRecoveryVersion
+                ? "Wounded Recovery injury"
+                : (weaponDice ? `2 × ${weaponDice} weapon ${weaponDice === 1 ? "die" : "dice"}` : "2 × weapon dice");
+
+            const rawHtml = `
+                <div class="pf2e chat-card" style="border: 1px solid #8f1d24; border-radius: 4px; padding: 6px; background: rgba(143, 29, 36, 0.08);">
+                    <p style="margin: 0;"><strong>Bruised Rib (${actor.name}):</strong> Taking an attack-trait action deals @Damage[${damageAmount}[piercing]] piercing damage <em>(${scaleHint})</em>.</p>
+                </div>`;
+            const textEditor = foundry?.applications?.ux?.TextEditor?.implementation ?? TextEditor;
+            const enriched = await textEditor.enrichHTML(rawHtml, { async: true, rollData: actor.getRollData?.() });
+            await ChatMessage.create({
+                speaker: ChatMessage.getSpeaker({ actor }),
+                content: enriched,
+                flags: { [MODULE_ID]: { isBruisedRibDamage: true } }
+            });
+        }
+    }
+
+    if (isAttackRoll) {
+        const fumbledGear = actor.items?.find(i => i.type === "effect" && i.flags?.[MODULE_ID]?.injuryName === "Fumbled Gear");
+        if (fumbledGear) {
+            try {
+                await fumbledGear.delete();
+            } catch (err) {
+                console.warn("PF2e Awesome Hero Point Rework | Could not clear Fumbled Gear after first attack:", err);
+            }
+        }
+
+        const tremblingGrip = actor.items?.find(i => i.type === "effect" && i.flags?.[MODULE_ID]?.injuryName === "Trembling Grip");
+        if (tremblingGrip?.system?.rules?.length) {
+            const rules = foundry.utils.deepClone(tremblingGrip.system.rules);
+            const toggleRule = rules.find(r => r.key === "RollOption" && r.option === "trembling-grip-first-attack" && r.value === true);
+            if (toggleRule) {
+                toggleRule.value = false;
+                try {
+                    await tremblingGrip.update({ "system.rules": rules });
+                } catch (err) {
+                    console.warn("PF2e Awesome Hero Point Rework | Could not toggle Trembling Grip after first attack:", err);
+                }
+            }
+        }
+    }
+});
+
+Hooks.on("combatStart", async (combat) => {
+    if (!game.user.isGM || !combat?.combatants) return;
+    for (const combatant of combat.combatants) {
+        const actor = combatant.actor;
+        const tremblingGrip = actor?.items?.find(i => i.type === "effect" && i.flags?.[MODULE_ID]?.injuryName === "Trembling Grip");
+        if (!tremblingGrip?.system?.rules?.length) continue;
+
+        const rules = foundry.utils.deepClone(tremblingGrip.system.rules);
+        const toggleRule = rules.find(r => r.key === "RollOption" && r.option === "trembling-grip-first-attack" && r.value === false);
+        if (toggleRule) {
+            toggleRule.value = true;
+            try {
+                await tremblingGrip.update({ "system.rules": rules });
+            } catch (err) {
+                console.warn("PF2e Awesome Hero Point Rework | Could not reset Trembling Grip on combat start:", err);
+            }
+        }
     }
 });
 
@@ -468,7 +556,7 @@ export async function updateCombatantInitiative(combatant, newTotal) {
     }
 }
 
-async function runRecklessInjuryCheck(actor, speaker, trigger) {
+async function runRecklessInjuryCheck(actor, speaker, trigger, sourceMessage = null) {
     const minorThreshold = clampPercent(game.settings.get(MODULE_ID, "minorInjuryThreshold"), 33);
     const majorThreshold = clampPercent(game.settings.get(MODULE_ID, "majorInjuryThreshold"), 5);
 
@@ -478,6 +566,7 @@ async function runRecklessInjuryCheck(actor, speaker, trigger) {
         majorThreshold,
         minorThreshold,
         trigger,
+        sourceMessage,
         delayMs: 2000
     });
 }
@@ -781,7 +870,7 @@ export async function doHeroicPush(message, diceString = "1d6") {
     }
 
     if (diceString === "2d6") {
-        await runRecklessInjuryCheck(msgActor, message.speaker, detectInjuryTrigger(message));
+        await runRecklessInjuryCheck(msgActor, message.speaker, detectInjuryTrigger(message), message);
     }
 }
 

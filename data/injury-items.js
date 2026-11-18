@@ -1,5 +1,28 @@
+const PERSISTENT_DAMAGE_UUID = "Compendium.pf2e.conditionitems.Item.lDVqvLKA6eF3Df60";
+
+export function createPersistentDamageRule(formula, damageType, dc = 15) {
+    return {
+        key: "GrantItem",
+        uuid: PERSISTENT_DAMAGE_UUID,
+        inMemoryOnly: true,
+        alterations: [
+            {
+                mode: "override",
+                property: "persistent-damage",
+                value: {
+                    formula: String(formula),
+                    damageType,
+                    dc
+                }
+            }
+        ]
+    };
+}
+
 const PRESET_RULES = {
-    "Re-open Wound": [],
+    "Re-open Wound": [
+        createPersistentDamageRule("1d4", "bleed", 15)
+    ],
     "Pounding Ears": [],
     "Pulled Hamstring": [
         { key: "FlatModifier", selector: "speed", value: -5, type: "status" }
@@ -8,6 +31,7 @@ const PRESET_RULES = {
     "Tunnel Vision": [
         { key: "FlatModifier", selector: "perception", value: -2, type: "status" }
     ],
+    "Pre-combat Jitters": [],
     "Tripped Up": [],
     "Strained Core": [],
     "Disoriented": [],
@@ -19,7 +43,14 @@ const PRESET_RULES = {
     "Numb Grip": [
         { key: "FlatModifier", selector: "attack", value: -2, type: "status" }
     ],
-    "Bruised Rib": [],
+    "Bruised Rib": [
+        {
+            key: "Note",
+            selector: "attack-roll",
+            title: "Bruised Rib",
+            text: "Injury: Taking an action with the attack trait deals piercing damage equal to 2 × weapon damage dice."
+        }
+    ],
     "Thrown Off Balance": [],
     "Strained Muscles": [],
     "Bile and Nausea": [],
@@ -63,6 +94,14 @@ const PRESET_RULES = {
     "Short of Breath": [
         { key: "FlatModifier", selector: "fortitude", value: -1, type: "status" }
     ],
+    "Shortness of Breath": [
+        {
+            key: "Note",
+            selector: ["diplomacy", "intimidation", "deception", "performance"],
+            title: "Shortness of Breath",
+            text: "Injury: You cannot speak above a whisper or use abilities requiring speech."
+        }
+    ],
     "Broken Tool": [],
     "Lingering Doubt": [
         {
@@ -76,7 +115,9 @@ const PRESET_RULES = {
     ],
     "Distracted": [],
     "Magical Backlash": [],
-    "Aetheric Burn": [],
+    "Aetheric Burn": [
+        createPersistentDamageRule("1", "force", 15)
+    ],
     "Mnemonic Strain": [],
     "Somatic Jitters": [],
     "Overloaded Senses": [],
@@ -105,10 +146,29 @@ const PRESET_RULES = {
         { key: "FlatModifier", selector: "acrobatics", value: -2, type: "status" }
     ],
     "Jumpy": [
-        { key: "FlatModifier", selector: "off-guard", value: 1, type: "condition" }
+        {
+            key: "Note",
+            selector: "initiative",
+            title: "Jumpy",
+            text: "Injury: You are @UUID[Compendium.pf2e.conditionitems.Item.AJh5ex99aV6VTggg]{Off-Guard} to the first attack against you in this combat."
+        }
     ],
     "Trembling Grip": [
-        { key: "FlatModifier", selector: "attack", value: -2, type: "status" }
+        {
+            key: "RollOption",
+            domain: "all",
+            option: "trembling-grip-first-attack",
+            toggleable: true,
+            value: true,
+            label: "Trembling Grip (First Attack)"
+        },
+        {
+            key: "FlatModifier",
+            selector: "attack",
+            value: -2,
+            type: "status",
+            predicate: ["trembling-grip-first-attack"]
+        }
     ],
     "Strained Back": [],
     "Twisted Joint": [],
@@ -133,9 +193,22 @@ const PRESET_RULES = {
         { key: "FlatModifier", selector: "saving-throw", value: -1, type: "status", predicate: ["poison"] },
         { key: "FlatModifier", selector: "saving-throw", value: -1, type: "status", predicate: ["disease"] }
     ],
-    "Numb Fingers": [],
+    "Numb Fingers": [
+        {
+            key: "Note",
+            selector: "thievery",
+            title: "Numb Fingers",
+            text: "Injury: This check requires an extra action or extra time due to numb fingers."
+        },
+        {
+            key: "Note",
+            selector: "crafting",
+            title: "Numb Fingers",
+            text: "Injury: This check requires an extra action or extra time due to numb fingers."
+        }
+    ],
     "Lingering Wound": [
-        { key: "Resistance", type: "vitality", value: 2 }
+        { key: "FlatModifier", selector: "healing-received", value: -2, type: "status" }
     ],
     "Internal Bleeding": [],
     "Shattered Resolve": [],
@@ -145,39 +218,23 @@ const PRESET_RULES = {
     "Ruptured Eardrum": [],
     "Damaged Eye": [],
     "Deep Laceration": [
-        {
-            "key": "GrantItem",
-            "uuid": "Compendium.pf2e.conditionitems.Item.lDVqvLKA6eF3Df60",
-            "inMemoryOnly": true,
-            "alterations": [
-                {
-                    "mode": "override",
-                    "property": "persistent-damage",
-                    "value": {
-                        "formula": "1d6",
-                        "damageType": "bleed",
-                        "dc": 20
-                    }
-                }
-            ]
-        }
+        createPersistentDamageRule("1d6", "bleed", 20)
     ],
     "Torn Tendon": [],
     "System Shock": [],
     "Fumbled Gear": [
         { key: "FlatModifier", selector: "attack", value: -2, type: "status" }
     ],
-    "Weapon Recoil": [],
-    "Shortness of Breath": []
+    "Weapon Recoil": []
 };
 
-export function createPrebuiltInjuryItemData(injuryData, categoryData, folderId, effectName, extraRules = []) {
+export function createPrebuiltInjuryItemData(injuryData, categoryData, folderId, effectName, overrideRules = []) {
     const durationObj = categoryData.durationRounds
         ? { value: categoryData.durationRounds, unit: "rounds", expiry: "turn-start" }
         : { value: -1, unit: "unlimited", expiry: null };
 
     const presetRules = PRESET_RULES[injuryData.name] || [];
-    const rules = [...presetRules, ...extraRules];
+    const rules = overrideRules.length > 0 ? [...overrideRules] : foundry.utils.deepClone(presetRules);
 
     return {
         name: effectName,

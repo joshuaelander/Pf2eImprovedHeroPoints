@@ -64,6 +64,7 @@ export async function rollAndResolveInjuryCheck({
     notificationText = "Injury sustained! Determining injury consequence...",
     flags = {},
     delayMs = 0,
+    sourceMessage = null,
     onAfterRoll = null
 } = {}) {
     if (delayMs > 0) {
@@ -118,7 +119,7 @@ export async function rollAndResolveInjuryCheck({
 
     if (severity) {
         ui.notifications.info(notificationText);
-        determineInjuryDialog(actor, severity, trigger);
+        determineInjuryDialog(actor, severity, trigger, sourceMessage);
     }
 
     return { roll: injuryRoll, severity };

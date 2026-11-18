@@ -17,6 +17,63 @@ export function canControlActor(actor, user = game.user) {
     return Boolean(user.isGM || actor.isOwner || user.character?.id === actor.id);
 }
 
+/**
+ * Extracts the number of weapon damage dice from a PF2e attack message/item, or null if unavailable.
+ */
+export function getWeaponDamageDice(message, actor = null) {
+    let item = message?.item || null;
+    if (!item && message?.flags?.pf2e?.origin?.uuid) {
+        try {
+            item = fromUuidSync(message.flags.pf2e.origin.uuid) || null;
+        } catch (_) {}
+    }
+    if (!item && actor && message?.flags?.pf2e?.context?.options) {
+        const idOpt = message.flags.pf2e.context.options.find(o => String(o).startsWith("item:id:"));
+        if (idOpt) {
+            item = actor.items?.get(String(idOpt).slice("item:id:".length)) || null;
+        }
+    }
+
+    if (item) {
+        const pcDice = Number(item.system?.damage?.dice);
+        if (Number.isFinite(pcDice) && pcDice > 0) return pcDice;
+
+        if (item.type === "melee" && item.system?.damageRolls) {
+            const firstRoll = Object.values(item.system.damageRolls)[0];
+            const match = String(firstRoll?.damage || "").match(/^(\d+)d/i);
+            if (match) return Number(match[1]);
+        }
+    }
+
+    const options = message?.flags?.pf2e?.context?.options || [];
+    for (const opt of options) {
+        const match = String(opt).match(/^(?:weapon|item):damage:dice:(\d+)$/i);
+        if (match) return Number(match[1]);
+    }
+
+    return null;
+}
+
+/**
+ * Extracts the cast spell rank from a PF2e spell attack message, or null if unavailable.
+ */
+export function getSpellRank(message) {
+    const rawRank = message?.flags?.pf2e?.origin?.castRank
+        ?? message?.flags?.pf2e?.context?.castRank
+        ?? message?.item?.rank
+        ?? message?.item?.system?.level?.value;
+    const rank = Number(rawRank);
+    if (Number.isFinite(rank) && rank > 0) return rank;
+
+    const options = message?.flags?.pf2e?.context?.options || [];
+    for (const opt of options) {
+        const match = String(opt).match(/^(?:spell|item):rank:(\d+)$/i);
+        if (match) return Number(match[1]);
+    }
+
+    return null;
+}
+
 export async function getInjuryFolder() {
     // Find or create a dedicated folder in the Items tab for our injuries
     let folder = game.folders.find(f => f.type === "Item" && (f.name === "PF2e Awesome Hero Point Injuries" || f.name === "Heroic Push Injuries"));
@@ -45,6 +102,16 @@ export async function getOrCreateInjuryEffect(injuryData, categoryData, actor = 
         const existingActorEffect = actor.items?.find(i => i.name === effectName && i.type === "effect" && i.flags?.[MODULE_ID]?.injuryName === injuryData.name);
         if (existingActorEffect) {
             embeddedItem = existingActorEffect;
+            if (Array.isArray(injuryData.rules) && injuryData.rules.length > 0) {
+                try {
+                    await existingActorEffect.update({
+                        "system.rules": effectData.system.rules,
+                        "system.description.value": effectData.system.description.value
+                    });
+                } catch (err) {
+                    console.warn("PF2e Awesome Hero Point Rework | Could not refresh dynamic injury effect:", err);
+                }
+            }
         } else {
             const embeddedData = foundry.utils.deepClone(effectData);
             delete embeddedData.folder; // Embedded items don't go in sidebar folders
