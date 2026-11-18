@@ -51,7 +51,7 @@ game.heroicPush.doHeroicPush(message, "1d6");
 
 In Configure Settings > Module Settings, GMs can:
 * Enable or disable Heroic Push and Reckless Push individually.
-* Adjust the d100 threshold values for Minor and Major injuries to tune the injury chances for your group.
+* Adjust the d100 threshold values for Minor and Major injuries on **Reckless Push** and the base percentages on **Injury Check** to tune the injury chances for your group.
 * Toggle auto-creation of World macros.
 
 ## Included Packs

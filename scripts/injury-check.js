@@ -1,4 +1,5 @@
 import { determineInjuryDialog } from "./determine-injury.js";
+import { MODULE_ID, clampPercent, resolveDomRoot, canControlActor } from "./injury-effects.js";
 
 /**
  * Reads the current Wounded condition value on a PF2e actor (returns 0 if not wounded).
@@ -25,12 +26,9 @@ export async function removeWoundedConditions(actor) {
     let removed = false;
 
     try {
-        if (typeof actor.decreaseCondition === "function") {
-            const existing = actor.getCondition?.("wounded");
-            if (existing) {
-                await actor.decreaseCondition("wounded", { forceRemove: true });
-                removed = true;
-            }
+        if (typeof actor.decreaseCondition === "function" && actor.getCondition?.("wounded")) {
+            await actor.decreaseCondition("wounded", { forceRemove: true });
+            removed = true;
         }
     } catch (err) {
         console.warn("PF2e Awesome Hero Point Rework | decreaseCondition failed, falling back to item deletion:", err);
@@ -49,21 +47,112 @@ export async function removeWoundedConditions(actor) {
 }
 
 /**
+ * Shared helper that rolls 1d100 against injury thresholds, posts the result card,
+ * and opens Determine Injury when an injury is sustained.
+ */
+export async function rollAndResolveInjuryCheck({
+    actor = null,
+    speaker = null,
+    majorThreshold = 5,
+    minorThreshold = 33,
+    trigger = "attacks",
+    titlePrefix = "",
+    subtitle = "",
+    majorText = "The hero suffered a Major Injury! Rolling for consequence...",
+    minorText = "The hero suffered a Minor Injury. Rolling for consequence...",
+    safeText = "The hero pushed through safely.",
+    notificationText = "Injury sustained! Determining injury consequence...",
+    flags = {},
+    delayMs = 0,
+    onAfterRoll = null
+} = {}) {
+    if (delayMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+
+    const injuryRoll = new Roll("1d100");
+    await injuryRoll.evaluate();
+
+    let severity = null;
+    let resultTitle, resultColor, icon, bodyText;
+
+    if (injuryRoll.total <= majorThreshold) {
+        severity = "major";
+        resultTitle = "Major Injury!!!";
+        resultColor = "#cc0000";
+        icon = "fa-skull-crossbones";
+        bodyText = majorText;
+    } else if (injuryRoll.total <= minorThreshold) {
+        severity = "minor";
+        resultTitle = "Minor Injury!";
+        resultColor = "#d08000";
+        icon = "fa-user-injured";
+        bodyText = minorText;
+    } else {
+        resultTitle = "No Injury";
+        resultColor = "#4a8a2a";
+        icon = "fa-check-circle";
+        bodyText = safeText;
+    }
+
+    const resolvedBodyText = typeof bodyText === "function" ? bodyText(injuryRoll.total) : bodyText;
+    const footerHtml = onAfterRoll ? (await onAfterRoll({ roll: injuryRoll, severity })) || "" : "";
+    const subtitleHtml = subtitle ? `<p style="margin: 0 0 4px 0; font-size: 0.9em; color: #555;">${subtitle}</p>` : "";
+
+    await ChatMessage.create({
+        speaker: speaker || (actor ? ChatMessage.getSpeaker({ actor }) : ChatMessage.getSpeaker()),
+        rolls: [injuryRoll],
+        flags: {
+            [MODULE_ID]: { isInjuryRoll: true, severity, ...flags }
+        },
+        flavor: `
+            <div style="background: rgba(0,0,0,0.05); border: 2px solid ${resultColor}; padding: 8px; border-radius: 5px; text-align: center; margin-bottom: 5px;">
+                <h4 style="color: ${resultColor}; margin: 0 0 5px 0; font-size: 1.2em; border-bottom: 1px solid ${resultColor}; padding-bottom: 3px;">
+                    <i class="fas ${icon}"></i> <strong>${titlePrefix}${resultTitle}</strong>
+                </h4>
+                ${subtitleHtml}
+                <p style="margin: 0; font-size: 1.05em;">${resolvedBodyText}</p>
+                ${footerHtml}
+            </div>`
+    });
+
+    if (severity) {
+        ui.notifications.info(notificationText);
+        determineInjuryDialog(actor, severity, trigger);
+    }
+
+    return { roll: injuryRoll, severity };
+}
+
+/**
+ * Formats a readable threshold preview string for the Injury Check dialog.
+ */
+function formatThresholdPreview(majorThreshold, minorThreshold) {
+    const majorRange = majorThreshold > 0 ? `1–${majorThreshold} (${majorThreshold}%)` : "None (0%)";
+    const minorChance = Math.max(0, minorThreshold - majorThreshold);
+    const minorRange = minorChance > 0 ? `${majorThreshold + 1}–${minorThreshold} (${minorChance}%)` : "None (0%)";
+    const maxInjury = Math.max(majorThreshold, minorThreshold);
+    const safeRange = maxInjury < 100 ? `${maxInjury + 1}–100` : "None";
+    return `Major Injury: <strong>${majorRange}</strong> | Minor Injury: <strong>${minorRange}</strong> | Safe: <strong>${safeRange}</strong>`;
+}
+
+/**
  * Opens the Injury Check dialog for a character recovering from Wounded.
  */
 export async function injuryCheckDialog(preSelectedActor = null) {
     const targetActor = preSelectedActor || canvas.tokens?.controlled?.[0]?.actor || game.user.character || null;
 
-    if (targetActor && !(game.user.isGM || targetActor.isOwner || game.user.character?.id === targetActor.id)) {
+    if (targetActor && !canControlActor(targetActor)) {
         return ui.notifications.warn("You do not have permission to perform an injury check for this character.");
     }
+
+    const majorThreshold = clampPercent(game.settings.get(MODULE_ID, "injuryCheckMajorThreshold"), 5);
+    const baseMinorThreshold = clampPercent(game.settings.get(MODULE_ID, "injuryCheckBaseMinorThreshold"), 23);
+    const calcMinorLimit = (woundedVal) => Math.min(100, baseMinorThreshold + (woundedVal * 10));
 
     const currentWounded = getActorWoundedValue(targetActor);
     const isWounded = currentWounded > 0;
     const initialVal = isWounded ? currentWounded : 1;
-    const majorChance = 5;
-
-    const calcMinorLimit = (woundedVal) => Math.min(100, 23 + (woundedVal * 10));
     const initialMinorLimit = calcMinorLimit(isWounded ? initialVal : 0);
 
     const actorLine = targetActor
@@ -85,7 +174,7 @@ export async function injuryCheckDialog(preSelectedActor = null) {
             <input type="number" id="wounded-value" name="wounded-value" value="${initialVal}" min="1" max="10" />
         </div>
         <p id="injury-chance-preview" style="margin: 8px 0 4px 0; font-size: 0.9em; opacity: 0.85;">
-            Major Injury: <strong>1–${majorChance}</strong> (5%) | Minor Injury: <strong>${majorChance + 1}–${initialMinorLimit}</strong> (${Math.max(0, initialMinorLimit - majorChance)}%) | Safe: <strong>${initialMinorLimit < 100 ? `${initialMinorLimit + 1}–100` : "None"}</strong>
+            ${formatThresholdPreview(majorThreshold, initialMinorLimit)}
         </p>
     </form>
     `;
@@ -94,7 +183,7 @@ export async function injuryCheckDialog(preSelectedActor = null) {
         title: "Injury Check (Wounded Recovery)",
         content: dialogHtml,
         render: (html) => {
-            const root = html instanceof HTMLElement ? html : (html?.[0] || html);
+            const root = resolveDomRoot(html);
             if (!root?.querySelector) return;
 
             const checkbox = root.querySelector("#is-wounded");
@@ -109,9 +198,7 @@ export async function injuryCheckDialog(preSelectedActor = null) {
                 }
                 if (previewEl) {
                     const wVal = checked ? Math.max(1, Math.min(10, parseInt(woundedInput?.value, 10) || 1)) : 0;
-                    const minorMax = calcMinorLimit(wVal);
-                    const safeText = minorMax < 100 ? `${minorMax + 1}–100` : "None";
-                    previewEl.innerHTML = `Major Injury: <strong>1–${majorChance}</strong> (5%) | Minor Injury: <strong>${majorChance + 1}–${minorMax}</strong> (${Math.max(0, minorMax - majorChance)}%) | Safe: <strong>${safeText}</strong>`;
+                    previewEl.innerHTML = formatThresholdPreview(majorThreshold, calcMinorLimit(wVal));
                 }
             };
 
@@ -123,86 +210,47 @@ export async function injuryCheckDialog(preSelectedActor = null) {
                 icon: '<i class="fas fa-dice-d20"></i>',
                 label: "Roll Injury Check",
                 callback: async (html) => {
-                    const root = html instanceof HTMLElement ? html : (html?.[0] || html);
+                    const root = resolveDomRoot(html);
                     const checkboxEl = root?.querySelector ? root.querySelector("#is-wounded") : html.find?.("#is-wounded")?.[0];
                     const valueEl = root?.querySelector ? root.querySelector("#wounded-value") : html.find?.("#wounded-value")?.[0];
 
                     const checked = Boolean(checkboxEl?.checked);
                     const woundedLevel = checked ? Math.max(1, Math.min(10, parseInt(valueEl?.value, 10) || 1)) : 0;
-
-                    const majorThreshold = 5;
                     const minorThreshold = calcMinorLimit(woundedLevel);
 
-                    const injuryRoll = new Roll("1d100");
-                    await injuryRoll.evaluate();
-
-                    let severity = null;
-                    let resultTitle, resultColor, icon, tableRollText;
-
-                    if (injuryRoll.total <= majorThreshold) {
-                        severity = "major";
-                        resultTitle = "Major Injury!!!";
-                        resultColor = "#cc0000";
-                        icon = "fa-skull-crossbones";
-                        tableRollText = `Rolled ${injuryRoll.total} (≤ ${majorThreshold}%). Suffered a Major Injury from Wounded recovery!`;
-                    } else if (injuryRoll.total <= minorThreshold) {
-                        severity = "minor";
-                        resultTitle = "Minor Injury!";
-                        resultColor = "#d08000";
-                        icon = "fa-user-injured";
-                        tableRollText = `Rolled ${injuryRoll.total} (≤ ${minorThreshold}%). Suffered a Minor Injury from Wounded recovery.`;
-                    } else {
-                        resultTitle = "No Injury";
-                        resultColor = "#4a8a2a";
-                        icon = "fa-check-circle";
-                        tableRollText = `Rolled ${injuryRoll.total} (> ${minorThreshold}%). Recovered without lingering injury!`;
-                    }
-
-                    // Remove Wounded condition(s) after the check
-                    let clearedWounded = false;
-                    if (targetActor) {
-                        try {
-                            clearedWounded = await removeWoundedConditions(targetActor);
-                        } catch (err) {
-                            console.error("PF2e Awesome Hero Point Rework | Failed to remove Wounded condition:", err);
-                            ui.notifications.error("Could not remove Wounded condition. Check console.");
-                        }
-                    }
-
-                    const woundedNote = woundedLevel > 0
+                    const subtitle = woundedLevel > 0
                         ? `Wounded ${woundedLevel} Check (Minor ≤ ${minorThreshold}%, Major ≤ ${majorThreshold}%)`
                         : `Recovery Check (Minor ≤ ${minorThreshold}%, Major ≤ ${majorThreshold}%)`;
 
-                    const clearedNote = clearedWounded
-                        ? `<p style="margin: 4px 0 0 0; font-size: 0.9em; color: #555;"><em>Removed Wounded condition from ${targetActor.name}.</em></p>`
-                        : "";
+                    let clearedWounded = false;
 
-                    await ChatMessage.create({
-                        speaker: targetActor ? ChatMessage.getSpeaker({ actor: targetActor }) : ChatMessage.getSpeaker(),
-                        rolls: [injuryRoll],
-                        flags: {
-                            "heroic-push-pf2e": { isInjuryRoll: true, isWoundedCheck: true, severity }
-                        },
-                        flavor: `
-                            <div style="background: rgba(0,0,0,0.05); border: 2px solid ${resultColor}; padding: 8px; border-radius: 5px; text-align: center; margin-bottom: 5px;">
-                                <h4 style="color: ${resultColor}; margin: 0 0 5px 0; font-size: 1.2em; border-bottom: 1px solid ${resultColor}; padding-bottom: 3px;">
-                                    <i class="fas ${icon}"></i> <strong>Injury Check: ${resultTitle}</strong>
-                                </h4>
-                                <p style="margin: 0 0 4px 0; font-size: 0.9em; color: #555;">${woundedNote}</p>
-                                <p style="margin: 0; font-size: 1.05em;">${tableRollText}</p>
-                                ${clearedNote}
-                            </div>`
+                    const { severity } = await rollAndResolveInjuryCheck({
+                        actor: targetActor,
+                        majorThreshold,
+                        minorThreshold,
+                        trigger: "woundedRecovery",
+                        titlePrefix: "Injury Check: ",
+                        subtitle,
+                        majorText: (total) => `Rolled ${total} (≤ ${majorThreshold}%). Suffered a Major Injury from Wounded recovery!`,
+                        minorText: (total) => `Rolled ${total} (≤ ${minorThreshold}%). Suffered a Minor Injury from Wounded recovery.`,
+                        safeText: (total) => `Rolled ${total} (> ${minorThreshold}%). Recovered without lingering injury!`,
+                        notificationText: "Injury sustained! Determining wounded recovery injury...",
+                        flags: { isWoundedCheck: true },
+                        onAfterRoll: async () => {
+                            if (!targetActor) return "";
+                            try {
+                                clearedWounded = await removeWoundedConditions(targetActor);
+                            } catch (err) {
+                                console.error("PF2e Awesome Hero Point Rework | Failed to remove Wounded condition:", err);
+                                ui.notifications.error("Could not remove Wounded condition. Check console.");
+                            }
+                            return clearedWounded
+                                ? `<p style="margin: 4px 0 0 0; font-size: 0.9em; color: #555;"><em>Removed Wounded condition from ${targetActor.name}.</em></p>`
+                                : "";
+                        }
                     });
 
-                    if (severity) {
-                        if (typeof determineInjuryDialog === "function") {
-                            ui.notifications.info(`Injury sustained! Determining wounded recovery injury...`);
-                            determineInjuryDialog(targetActor, severity, "woundedRecovery");
-                        } else if (typeof window.DetermineInjuryDialog === "function") {
-                            ui.notifications.info(`Injury sustained! Determining wounded recovery injury...`);
-                            window.DetermineInjuryDialog(targetActor, severity, "woundedRecovery");
-                        }
-                    } else if (clearedWounded) {
+                    if (!severity && clearedWounded) {
                         ui.notifications.info(`No injury sustained! Removed Wounded condition from ${targetActor.name}.`);
                     }
                 }

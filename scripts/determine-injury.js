@@ -1,4 +1,4 @@
-import { getOrCreateInjuryEffect, applyInjuryEffect } from "./injury-effects.js";
+import { getOrCreateInjuryEffect, applyInjuryEffect, resolveDomRoot } from "./injury-effects.js";
 
 export async function determineInjuryDialog(preSelectedActor = null, defaultSeverity = "minor", defaultTrigger = "attacks") {
     // Ensure we have a target to apply effects to
@@ -201,7 +201,8 @@ export async function determineInjuryDialog(preSelectedActor = null, defaultSeve
             </div>
         `;
 
-        const enrichedContent = await TextEditor.enrichHTML(content, { async: true, rollData: actor?.getRollData() });
+        const textEditor = foundry?.applications?.ux?.TextEditor?.implementation ?? TextEditor;
+        const enrichedContent = await textEditor.enrichHTML(content, { async: true, rollData: actor?.getRollData() });
 
         await ChatMessage.create({
             user: game.user.id,
@@ -215,17 +216,13 @@ export async function determineInjuryDialog(preSelectedActor = null, defaultSeve
         title: "Determine Injury",
         content: dialogHtml,
         render: (html) => {
-            const root = html instanceof HTMLElement ? html : (html?.[0] || html);
+            const root = resolveDomRoot(html);
             const severitySelect = root?.querySelector ? root.querySelector("#severity") : html.find?.("#severity")?.[0];
             const triggerContainer = root?.querySelector ? root.querySelector("#trigger-container") : html.find?.("#trigger-container")?.[0];
 
             if (severitySelect && triggerContainer) {
                 severitySelect.addEventListener("change", function () {
-                    if (this.value === "major") {
-                        triggerContainer.style.display = "none";
-                    } else {
-                        triggerContainer.style.display = "flex";
-                    }
+                    triggerContainer.style.display = this.value === "major" ? "none" : "flex";
                 });
             }
         },
@@ -234,7 +231,7 @@ export async function determineInjuryDialog(preSelectedActor = null, defaultSeve
                 icon: '<i class="fas fa-dice-d20"></i>',
                 label: "Roll Injury",
                 callback: async (html) => {
-                    const root = html instanceof HTMLElement ? html : (html?.[0] || html);
+                    const root = resolveDomRoot(html);
                     const severity = (root?.querySelector ? root.querySelector("#severity")?.value : html.find?.("#severity")?.val()) || "minor";
                     const trigger = (root?.querySelector ? root.querySelector("#trigger")?.value : html.find?.("#trigger")?.val()) || "attacks";
 

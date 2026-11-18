@@ -1,10 +1,16 @@
 import { determineInjuryDialog } from "./determine-injury.js";
-import { injuryCheckDialog, getActorWoundedValue, removeWoundedConditions } from "./injury-check.js";
+import { MODULE_ID, clampPercent, resolveDomRoot, canControlActor } from "./injury-effects.js";
+import {
+    injuryCheckDialog,
+    getActorWoundedValue,
+    removeWoundedConditions,
+    rollAndResolveInjuryCheck
+} from "./injury-check.js";
 
 Hooks.once("init", () => {
     console.log("PF2e Awesome Hero Point Rework | Initializing module v1.5.0");
 
-    game.settings.register("heroic-push-pf2e", "enableHeroicPush", {
+    game.settings.register(MODULE_ID, "enableHeroicPush", {
         name: "Enable Heroic Push (+1d6)",
         hint: "Shows the Heroic Push option in the right-click menu for chat messages and the combat tracker.",
         scope: "world",
@@ -13,7 +19,7 @@ Hooks.once("init", () => {
         default: true
     });
 
-    game.settings.register("heroic-push-pf2e", "enableRecklessPush", {
+    game.settings.register(MODULE_ID, "enableRecklessPush", {
         name: "Enable Reckless Push (+2d6)",
         hint: "Shows the Reckless Push option in the right-click menu for chat messages and the combat tracker.",
         scope: "world",
@@ -22,7 +28,7 @@ Hooks.once("init", () => {
         default: true
     });
 
-    game.settings.register("heroic-push-pf2e", "autoCreateMacros", {
+    game.settings.register(MODULE_ID, "autoCreateMacros", {
         name: "Auto-Create World Macros for Players",
         hint: "Automatically ensures Hero Point Last Roll, Injury Check, and Determine Injury macros exist in the World Macros directory for easy hotbar dragging.",
         scope: "world",
@@ -31,25 +37,42 @@ Hooks.once("init", () => {
         default: true
     });
 
-    game.settings.register("heroic-push-pf2e", "minorInjuryThreshold", {
-        name: "Minor Injury Threshold (%)",
-        hint: "The maximum d100 roll that results in an injury. Rolls between (Major Injury Threshold + 1) and this value result in a Minor Injury. Rolls above this value result in No Injury. (Default: 33, giving a 33% overall injury chance).",
+    game.settings.register(MODULE_ID, "minorInjuryThreshold", {
+        name: "Reckless Push: Minor Injury Threshold (%)",
+        hint: "The maximum d100 roll that results in an injury on a Reckless Push. Rolls between (Major Threshold + 1) and this value result in a Minor Injury. (Default: 33).",
         scope: "world",
         config: true,
         type: Number,
         default: 33
     });
 
-    game.settings.register("heroic-push-pf2e", "majorInjuryThreshold", {
-        name: "Major Injury Threshold (%)",
-        hint: "The maximum d100 roll that results in a Major Injury. Rolls from 1 up to this value result in a Major Injury. (Default: 5, giving a 5% chance).",
+    game.settings.register(MODULE_ID, "majorInjuryThreshold", {
+        name: "Reckless Push: Major Injury Threshold (%)",
+        hint: "The maximum d100 roll that results in a Major Injury on a Reckless Push. Rolls from 1 up to this value result in a Major Injury. (Default: 5).",
         scope: "world",
         config: true,
         type: Number,
         default: 5
     });
 
-    // Expose public API
+    game.settings.register(MODULE_ID, "injuryCheckBaseMinorThreshold", {
+        name: "Injury Check: Base Minor Injury Threshold (%)",
+        hint: "Base maximum d100 roll for an injury on the Wounded Recovery Injury Check before adding +10% per Wounded level. (Default: 23, so Wounded 1 = 33%, Wounded 2 = 43%).",
+        scope: "world",
+        config: true,
+        type: Number,
+        default: 23
+    });
+
+    game.settings.register(MODULE_ID, "injuryCheckMajorThreshold", {
+        name: "Injury Check: Major Injury Threshold (%)",
+        hint: "Maximum d100 roll that results in a Major Injury on the Wounded Recovery Injury Check. (Default: 5).",
+        scope: "world",
+        config: true,
+        type: Number,
+        default: 5
+    });
+
     const api = {
         doHeroicPush,
         doHeroicPushCombatant,
@@ -73,56 +96,116 @@ Hooks.once("init", () => {
         getCombatantFromElement
     };
 
-    game.modules.get("heroic-push-pf2e").api = api;
+    game.modules.get(MODULE_ID).api = api;
     game.heroicPush = api;
     window.HeroicPush = api;
 
-    // Register Context Menu Options for Chat Messages
     Hooks.on("getChatMessageContextOptions", (app, options) => {
-        injectMenuOptions(options);
+        buildPushMenuOptions(
+            options,
+            (li) => isPushableMessage(getMessageFromElement(li), game.user),
+            (li, dice) => doHeroicPush(getMessageFromElement(li), dice)
+        );
     });
 
-    // Register Context Menu Options for Combat Tracker (Initiative)
     Hooks.on("getCombatTrackerEntryContext", (appOrHtml, entryOptions) => {
-        injectCombatTrackerOptions(appOrHtml, entryOptions);
+        const options = Array.isArray(entryOptions) ? entryOptions : (Array.isArray(appOrHtml) ? appOrHtml : null);
+        if (!options) return;
+
+        buildPushMenuOptions(
+            options,
+            (li) => {
+                const combatant = getCombatantFromElement(li);
+                return Boolean(combatant && Number.isFinite(combatant.initiative) && canControlActor(combatant.actor));
+            },
+            (li, dice) => doHeroicPushCombatant(li, dice)
+        );
     });
 });
 
 Hooks.once("ready", async () => {
     // Socket listener for player-triggered initiative updates handled on GM client
-    game.socket.on("module.heroic-push-pf2e", async (data) => {
+    game.socket.on(`module.${MODULE_ID}`, async (data) => {
         if (!game.user.isGM) return;
         if (data?.action === "updateInitiative" && data.combatantId) {
-            let combatant = game.combat?.combatants.get(data.combatantId);
-            if (!combatant && game.combats) {
-                for (const c of game.combats) {
-                    if (c.combatants.has(data.combatantId)) {
-                        combatant = c.combatants.get(data.combatantId);
-                        break;
-                    }
-                }
-            }
+            const combatant = findCombatantById(data.combatantId);
             if (combatant) {
                 await combatant.update({ initiative: data.initiative });
             }
         }
     });
 
-    if (game.user.isGM && game.settings.get("heroic-push-pf2e", "autoCreateMacros")) {
+    if (game.user.isGM && game.settings.get(MODULE_ID, "autoCreateMacros")) {
         await ensureModuleMacros();
     }
 });
+
+function buildPushMenuOptions(options, conditionFn, onPushFn) {
+    const newOptions = [];
+
+    if (game.settings.get(MODULE_ID, "enableHeroicPush")) {
+        newOptions.push({
+            name: "Reroll with Heroic Push (+1d6)",
+            icon: '<i class="fas fa-dice-d6" style="color: #4a8a2a;"></i>',
+            condition: conditionFn,
+            callback: (li) => onPushFn(li, "1d6")
+        });
+    }
+
+    if (game.settings.get(MODULE_ID, "enableRecklessPush")) {
+        newOptions.push({
+            name: "Reroll with Reckless Push (+2d6)",
+            icon: '<i class="fas fa-biohazard" style="color: #cc0000;"></i>',
+            condition: conditionFn,
+            callback: (li) => onPushFn(li, "2d6")
+        });
+    }
+
+    if (newOptions.length > 0) {
+        options.unshift(...newOptions);
+    }
+}
+
+function findCombatantById(combatantId) {
+    if (!combatantId) return null;
+    if (game.combat?.combatants.has(combatantId)) {
+        return game.combat.combatants.get(combatantId);
+    }
+    for (const combat of game.combats ?? []) {
+        if (combat.combatants.has(combatantId)) {
+            return combat.combatants.get(combatantId);
+        }
+    }
+    return null;
+}
+
+function findCombatantForActor(actor, tokenId = null) {
+    if (!actor) return null;
+    const matcher = (c) => (tokenId && c.tokenId === tokenId) || c.actorId === actor.id;
+
+    if (game.combat) {
+        const activeMatch = game.combat.combatants.find(matcher);
+        if (activeMatch) return activeMatch;
+    }
+    for (const combat of game.combats ?? []) {
+        const match = combat.combatants.find(matcher);
+        if (match) return match;
+    }
+    return null;
+}
 
 /**
  * Universal helper to extract a ChatMessage from any DOM element (including inner children)
  */
 export function getMessageFromElement(li) {
-    const element = li instanceof HTMLElement ? li : (li?.[0] || li);
+    const element = resolveDomRoot(li);
     if (!element) return null;
-    const targetEl = element.closest ? (element.closest("[data-message-id], [data-entry-id], [data-document-id], .chat-message, .message") || element) : element;
-    const id = targetEl.dataset?.messageId 
-        || targetEl.dataset?.entryId 
-        || targetEl.dataset?.documentId 
+    const targetEl = element.closest
+        ? (element.closest("[data-message-id], [data-entry-id], [data-document-id], .chat-message, .message") || element)
+        : element;
+    const id = targetEl.dataset?.messageId
+        || targetEl.dataset?.entryId
+        || targetEl.dataset?.documentId
         || targetEl.getAttribute?.("data-message-id")
         || targetEl.getAttribute?.("data-entry-id")
         || targetEl.getAttribute?.("data-document-id");
@@ -133,22 +216,14 @@ export function getMessageFromElement(li) {
  * Universal helper to extract a Combatant from a Combat Tracker DOM element
  */
 export function getCombatantFromElement(li) {
-    const element = li instanceof HTMLElement ? li : (li?.[0] || li);
+    const element = resolveDomRoot(li);
     if (!element) return null;
     const targetEl = element.closest ? (element.closest("[data-combatant-id], .combatant") || element) : element;
-    const id = targetEl.dataset?.combatantId 
+    const id = targetEl.dataset?.combatantId
         || targetEl.getAttribute?.("data-combatant-id")
-        || targetEl.dataset?.entryId 
+        || targetEl.dataset?.entryId
         || targetEl.dataset?.documentId;
-    if (id) {
-        if (game.combat?.combatants.has(id)) {
-            return game.combat.combatants.get(id);
-        }
-        for (const c of game.combats) {
-            if (c.combatants.has(id)) return c.combatants.get(id);
-        }
-    }
-    return null;
+    return findCombatantById(id);
 }
 
 /**
@@ -158,7 +233,6 @@ export function getMessageActor(message) {
     if (!message) return null;
     if (message.actor) return message.actor;
 
-    // Check PF2e context actor UUID
     if (message.flags?.pf2e?.context?.actor) {
         try {
             const actor = fromUuidSync(message.flags.pf2e.context.actor);
@@ -166,7 +240,6 @@ export function getMessageActor(message) {
         } catch (_) {}
     }
 
-    // Check message speaker
     if (message.speaker) {
         const speakerActor = ChatMessage.getSpeakerActor(message.speaker);
         if (speakerActor) return speakerActor;
@@ -177,16 +250,13 @@ export function getMessageActor(message) {
         }
 
         if (message.speaker.scene && message.speaker.token) {
-            const scene = game.scenes.get(message.speaker.scene);
-            const token = scene?.tokens?.get(message.speaker.token);
+            const token = game.scenes.get(message.speaker.scene)?.tokens?.get(message.speaker.token);
             if (token?.actor) return token.actor;
         }
     }
 
-    // Fallback: If current user created this message, fallback to their controlled token or character
     if (message.author?.id === game.user.id) {
-        if (canvas?.tokens?.controlled?.[0]?.actor) return canvas.tokens.controlled[0].actor;
-        if (game.user.character) return game.user.character;
+        return canvas?.tokens?.controlled?.[0]?.actor || game.user.character || null;
     }
 
     return null;
@@ -197,11 +267,27 @@ export function getMessageActor(message) {
  */
 export function hasD20Roll(message) {
     if (!message?.rolls?.length) return false;
-    return message.rolls.some(roll => {
-        if (roll.dice?.some(d => d.faces === 20)) return true;
-        if (roll.terms?.some(t => t.faces === 20 || (t.rolls && t.rolls.some(r => r.faces === 20)))) return true;
-        return false;
-    });
+    return message.rolls.some(roll =>
+        roll.dice?.some(d => d.faces === 20)
+        || roll.terms?.some(t => t.faces === 20 || t.rolls?.some(r => r.faces === 20))
+    );
+}
+
+function isEligibleD20Message(message) {
+    if (!message || !hasD20Roll(message)) return false;
+    if (message.flags?.pf2e?.context?.type?.includes("damage")) return false;
+    if (message.flags?.[MODULE_ID]?.isInjuryRoll) return false;
+    return true;
+}
+
+function isInitiativeMessage(message) {
+    if (!message) return false;
+    return Boolean(
+        message.flags?.core?.initiativeRoll
+        || message.flags?.pf2e?.context?.type === "initiative"
+        || message.flags?.pf2e?.context?.domains?.includes("initiative")
+        || message.flavor?.toLowerCase().includes("initiative")
+    );
 }
 
 /**
@@ -209,97 +295,12 @@ export function hasD20Roll(message) {
  */
 export function isPushableMessage(message, user = game.user) {
     try {
-        if (!message) return false;
-        if (!hasD20Roll(message)) return false;
-        if (message.flags?.pf2e?.context?.type?.includes("damage")) return false;
-        if (message.flags?.["heroic-push-pf2e"]?.isInjuryRoll) return false;
-
+        if (!isEligibleD20Message(message)) return false;
         const actor = getMessageActor(message);
-        if (!actor) return false;
-
-        const isOwner = user.isGM || actor.isOwner || (user.character?.id === actor.id);
-        return Boolean(isOwner);
+        return canControlActor(actor, user);
     } catch (err) {
         console.error("PF2e Awesome Hero Point Rework | Error evaluating pushable message:", err);
         return false;
-    }
-}
-
-/**
- * Chat Message Context Menu injection
- */
-function injectMenuOptions(options) {
-    const canPush = (li) => {
-        const msg = getMessageFromElement(li);
-        return isPushableMessage(msg, game.user);
-    };
-
-    const newOptions = [];
-
-    if (game.settings.get("heroic-push-pf2e", "enableHeroicPush")) {
-        newOptions.push({
-            name: "Reroll with Heroic Push (+1d6)",
-            icon: '<i class="fas fa-dice-d6" style="color: #4a8a2a;"></i>',
-            condition: canPush,
-            callback: li => doHeroicPush(getMessageFromElement(li), "1d6")
-        });
-    }
-
-    if (game.settings.get("heroic-push-pf2e", "enableRecklessPush")) {
-        newOptions.push({
-            name: "Reroll with Reckless Push (+2d6)",
-            icon: '<i class="fas fa-biohazard" style="color: #cc0000;"></i>',
-            condition: canPush,
-            callback: li => doHeroicPush(getMessageFromElement(li), "2d6")
-        });
-    }
-
-    if (newOptions.length > 0) {
-        options.unshift(...newOptions);
-    }
-}
-
-/**
- * Combat Tracker (Initiative) Context Menu injection
- */
-function injectCombatTrackerOptions(appOrHtml, entryOptions) {
-    const options = Array.isArray(entryOptions) ? entryOptions : (Array.isArray(appOrHtml) ? appOrHtml : null);
-    if (!options) return;
-
-    const canPushCombatant = (li) => {
-        const combatant = getCombatantFromElement(li);
-        if (!combatant) return false;
-        if (!Number.isFinite(combatant.initiative)) return false;
-
-        const actor = combatant.actor;
-        if (!actor) return false;
-
-        const isOwner = game.user.isGM || actor.isOwner || (game.user.character?.id === actor.id);
-        return Boolean(isOwner);
-    };
-
-    const newOptions = [];
-
-    if (game.settings.get("heroic-push-pf2e", "enableHeroicPush")) {
-        newOptions.push({
-            name: "Reroll with Heroic Push (+1d6)",
-            icon: '<i class="fas fa-dice-d6" style="color: #4a8a2a;"></i>',
-            condition: canPushCombatant,
-            callback: li => doHeroicPushCombatant(li, "1d6")
-        });
-    }
-
-    if (game.settings.get("heroic-push-pf2e", "enableRecklessPush")) {
-        newOptions.push({
-            name: "Reroll with Reckless Push (+2d6)",
-            icon: '<i class="fas fa-biohazard" style="color: #cc0000;"></i>',
-            condition: canPushCombatant,
-            callback: li => doHeroicPushCombatant(li, "2d6")
-        });
-    }
-
-    if (newOptions.length > 0) {
-        options.unshift(...newOptions);
     }
 }
 
@@ -309,29 +310,21 @@ function injectCombatTrackerOptions(appOrHtml, entryOptions) {
 export function getCheckDisplayName(message) {
     if (!message) return "Roll";
 
-    // 1. Try to extract from chat message flavor/header HTML
     if (message.flavor) {
         try {
             const tempDiv = document.createElement("div");
             tempDiv.innerHTML = message.flavor;
             const header = tempDiv.querySelector("h3, h4, .title, header");
-            if (header?.textContent?.trim()) {
-                const cleanTitle = header.textContent.trim().replace(/\s+/g, " ");
-                if (!cleanTitle.includes("Heroic Push") && !cleanTitle.includes("Reckless Push") && cleanTitle.length > 1) {
-                    return cleanTitle;
-                }
+            const cleanTitle = header?.textContent?.trim().replace(/\s+/g, " ");
+            if (cleanTitle && cleanTitle.length > 1 && !cleanTitle.includes("Heroic Push") && !cleanTitle.includes("Reckless Push")) {
+                return cleanTitle;
             }
         } catch (_) {}
     }
 
-    // 2. Check item name (e.g. "Arcane Spell Attack", "Strike: Longsword", "Produce Flame")
-    if (message.item?.name) {
-        return message.item.name;
-    }
+    if (message.item?.name) return message.item.name;
 
     const context = message.flags?.pf2e?.context;
-
-    // 3. Check specific domains (excluding generic domains like "all", "check", "roll")
     if (context?.domains?.length) {
         const specificDomain = context.domains.find(d => !["all", "check", "roll", "d20"].includes(String(d).toLowerCase()));
         if (specificDomain) {
@@ -339,7 +332,6 @@ export function getCheckDisplayName(message) {
         }
     }
 
-    // 4. Check context type
     if (context?.type) {
         return String(context.type).replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase());
     }
@@ -361,7 +353,6 @@ export function detectInjuryTrigger(message) {
     const flavor = String(message.flavor || "").toLowerCase();
     const content = String(message.content || "").toLowerCase();
 
-    // 1. Spell Attacks
     if (type === "spell-attack-roll"
         || domains.some(d => d.includes("spell-attack"))
         || options.some(o => o.includes("spell-attack") || o === "spell")
@@ -373,7 +364,6 @@ export function detectInjuryTrigger(message) {
         return "spellAttacks";
     }
 
-    // 2. Wounded Recovery
     if (domains.some(d => d.includes("recovery"))
         || options.some(o => o.includes("recovery"))
         || flavor.includes("recovery check")
@@ -381,16 +371,10 @@ export function detectInjuryTrigger(message) {
         return "woundedRecovery";
     }
 
-    // 3. Initiative
-    if (type === "initiative"
-        || domains.includes("initiative")
-        || message.flags?.core?.initiativeRoll
-        || flavor.includes("initiative")
-        || content.includes("initiative")) {
+    if (isInitiativeMessage(message) || content.includes("initiative")) {
         return "initiative";
     }
 
-    // 4. Saving Throws
     if (type === "saving-throw"
         || domains.some(d => ["saving-throw", "fortitude", "reflex", "will"].includes(d))
         || flavor.includes("saving throw")
@@ -399,22 +383,12 @@ export function detectInjuryTrigger(message) {
         return "savingThrows";
     }
 
-    // 5. Skill Checks & Perception
     if (type === "skill-check"
         || type === "perception-check"
         || domains.some(d => d.includes("skill") || d.includes("perception"))
         || flavor.includes("skill check")
         || flavor.includes("perception")) {
         return "skillChecks";
-    }
-
-    // 6. Regular Attacks / Strikes (default fallback for attack rolls)
-    if (type === "attack-roll"
-        || domains.some(d => d.includes("attack"))
-        || flavor.includes("strike")
-        || flavor.includes("attack")
-        || content.includes("strike")) {
-        return "attacks";
     }
 
     return "attacks";
@@ -425,50 +399,29 @@ export function detectInjuryTrigger(message) {
  */
 export function findLastPushableMessage(options = {}) {
     const user = options.user || game.user;
-    let targetActor = options.actor || null;
-
-    if (!targetActor) {
-        targetActor = canvas?.tokens?.controlled?.[0]?.actor || user.character || null;
-    }
+    const targetActor = options.actor || canvas?.tokens?.controlled?.[0]?.actor || user.character || null;
 
     const messages = game.messages.contents;
+    let ownedFallback = null;
+
     for (let i = messages.length - 1; i >= 0; i--) {
         const msg = messages[i];
-        if (!hasD20Roll(msg)) continue;
-        if (msg.flags?.pf2e?.context?.type?.includes("damage")) continue;
-        if (msg.flags?.["heroic-push-pf2e"]?.isInjuryRoll) continue;
+        if (!isEligibleD20Message(msg)) continue;
 
         const msgActor = getMessageActor(msg);
         if (!msgActor) continue;
 
         if (targetActor) {
-            if (msgActor.id !== targetActor.id) continue;
-        } else if (!user.isGM) {
-            const isOwner = msgActor.isOwner || (user.character?.id === msgActor.id);
-            if (!isOwner) continue;
-        }
-
-        return msg;
-    }
-
-    // Fallback if targetActor had no recent roll: check any character the player owns
-    if (targetActor && !user.isGM) {
-        for (let i = messages.length - 1; i >= 0; i--) {
-            const msg = messages[i];
-            if (!hasD20Roll(msg)) continue;
-            if (msg.flags?.pf2e?.context?.type?.includes("damage")) continue;
-            if (msg.flags?.["heroic-push-pf2e"]?.isInjuryRoll) continue;
-
-            const msgActor = getMessageActor(msg);
-            if (!msgActor) continue;
-
-            if (msgActor.isOwner || (user.character?.id === msgActor.id)) {
-                return msg;
+            if (msgActor.id === targetActor.id) return msg;
+            if (!ownedFallback && !user.isGM && canControlActor(msgActor, user)) {
+                ownedFallback = msg;
             }
+        } else if (canControlActor(msgActor, user)) {
+            return msg;
         }
     }
 
-    return null;
+    return ownedFallback;
 }
 
 /**
@@ -479,21 +432,8 @@ export function findInitiativeMessage(actor) {
     const messages = game.messages.contents;
     for (let i = messages.length - 1; i >= 0; i--) {
         const msg = messages[i];
-        if (!hasD20Roll(msg)) continue;
-        if (msg.flags?.["heroic-push-pf2e"]?.isInjuryRoll) continue;
-
-        const isInit = Boolean(
-            msg.flags?.core?.initiativeRoll
-            || msg.flags?.pf2e?.context?.type === "initiative"
-            || msg.flags?.pf2e?.context?.domains?.includes("initiative")
-            || (msg.flavor && msg.flavor.toLowerCase().includes("initiative"))
-        );
-        if (!isInit) continue;
-
-        const msgActor = getMessageActor(msg);
-        if (msgActor?.id === actor.id) {
-            return msg;
-        }
+        if (!isEligibleD20Message(msg) || !isInitiativeMessage(msg)) continue;
+        if (getMessageActor(msg)?.id === actor.id) return msg;
     }
     return null;
 }
@@ -514,17 +454,48 @@ export async function updateCombatantInitiative(combatant, newTotal) {
 
     if (game.user.isGM) {
         await combatant.update({ initiative: finalInitiative });
-    } else {
-        try {
-            await combatant.update({ initiative: finalInitiative });
-        } catch (err) {
-            game.socket.emit("module.heroic-push-pf2e", {
-                action: "updateInitiative",
-                combatantId: combatant.id,
-                initiative: finalInitiative
-            });
-        }
+        return;
     }
+
+    try {
+        await combatant.update({ initiative: finalInitiative });
+    } catch (_) {
+        game.socket.emit(`module.${MODULE_ID}`, {
+            action: "updateInitiative",
+            combatantId: combatant.id,
+            initiative: finalInitiative
+        });
+    }
+}
+
+async function runRecklessInjuryCheck(actor, speaker, trigger) {
+    const minorThreshold = clampPercent(game.settings.get(MODULE_ID, "minorInjuryThreshold"), 33);
+    const majorThreshold = clampPercent(game.settings.get(MODULE_ID, "majorInjuryThreshold"), 5);
+
+    return rollAndResolveInjuryCheck({
+        actor,
+        speaker,
+        majorThreshold,
+        minorThreshold,
+        trigger,
+        delayMs: 2000
+    });
+}
+
+function buildPushCardHeader(actor, diceString, summaryText) {
+    const pushFlavor = diceString === "1d6" ? "(No Injury)" : "(Chance of Injury)";
+    const pushTitle = diceString === "1d6" ? "Heroic Push (+1d6)!" : "Reckless Push (+2d6)!";
+
+    return `
+        <div class="pf2e chat-card heroic-push-card">
+            <header class="card-header flexrow" style="align-items: center; padding-bottom: 5px;">
+                <img src="${actor.img || "icons/svg/mystery-man.svg"}" title="${actor.name}" width="36" height="36" style="border: none; margin-right: 8px;"/>
+                <h3 style="margin: 0; line-height: normal;">${pushTitle} <br><span style="font-size: 0.8em; color: #555;">${pushFlavor}</span></h3>
+            </header>
+            <div class="card-content" style="margin-top: 5px; margin-bottom: 5px;">
+                <p style="margin: 0 0 5px 0;">${summaryText}</p>
+            </div>
+        </div>`;
 }
 
 /**
@@ -536,107 +507,43 @@ export async function doHeroicPushCombatant(li, diceString = "1d6") {
 
     const actor = combatant.actor;
     if (!actor) return ui.notifications.error("No actor linked to that combatant.");
-
-    const canControl = game.user.isGM || actor.isOwner || (game.user.character?.id === actor.id);
-    if (!canControl) return ui.notifications.warn("You do not have permission to push this character's rolls.");
+    if (!canControlActor(actor)) return ui.notifications.warn("You do not have permission to push this character's rolls.");
 
     const hp = actor.system?.resources?.heroPoints?.value ?? 0;
     if (hp < 1) return ui.notifications.warn(`${actor.name} does not have enough Hero Points!`);
 
-    // 1. Try to find the actual initiative chat message first
     const initMsg = findInitiativeMessage(actor);
     if (initMsg) {
         return doHeroicPush(initMsg, diceString);
     }
 
-    // 2. Fallback if no chat message exists in history: push combatant initiative directly
+    // Fallback if no initiative chat message exists in history
     await actor.update({ "system.resources.heroPoints.value": hp - 1 });
 
-    const currentInit = combatant.initiative ?? 10;
     const pushRoll = new Roll(`1d20 + ${diceString}[Heroic Push]`);
     await pushRoll.evaluate();
-
-    const pushFlavor = diceString === "1d6" ? "(No Injury)" : "(Chance of Injury)";
-    const pushTitle = diceString === "1d6" ? "Heroic Push (+1d6)!" : "Reckless Push (+2d6)!";
 
     await updateCombatantInitiative(combatant, pushRoll.total);
     ui.notifications.info(`Updated ${actor.name}'s initiative to ${pushRoll.total}!`);
 
+    const speaker = ChatMessage.getSpeaker({ actor, token: combatant.token });
     await ChatMessage.create({
-        speaker: ChatMessage.getSpeaker({ actor, token: combatant.token }),
+        speaker,
         rolls: [pushRoll],
         flags: {
-            "core": { initiativeRoll: true },
-            "pf2e": { context: { type: "initiative" } },
-            "heroic-push-pf2e": { isPushedRoll: true, pushType: diceString }
+            core: { initiativeRoll: true },
+            pf2e: { context: { type: "initiative" } },
+            [MODULE_ID]: { isPushedRoll: true, pushType: diceString }
         },
-        flavor: `
-            <div class="pf2e chat-card heroic-push-card">
-                <header class="card-header flexrow" style="align-items: center; padding-bottom: 5px;">
-                    <img src="${actor.img || 'icons/svg/mystery-man.svg'}" title="${actor.name}" width="36" height="36" style="border: none; margin-right: 8px;"/>
-                    <h3 style="margin: 0; line-height: normal;">${pushTitle} <br><span style="font-size: 0.8em; color: #555;">${pushFlavor}</span></h3>
-                </header>
-                <div class="card-content" style="margin-top: 5px; margin-bottom: 5px;">
-                    <p style="margin: 0 0 5px 0;"><strong>${actor.name}</strong> spent 1 Hero Point to push Initiative to <strong>${pushRoll.total}</strong>!</p>
-                </div>
-            </div>`
+        flavor: buildPushCardHeader(
+            actor,
+            diceString,
+            `<strong>${actor.name}</strong> spent 1 Hero Point to push Initiative to <strong>${pushRoll.total}</strong>!`
+        )
     });
 
     if (diceString === "2d6") {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        const injuryRoll = new Roll("1d100");
-        await injuryRoll.evaluate();
-
-        const rawMinor = Number(game.settings.get("heroic-push-pf2e", "minorInjuryThreshold"));
-        const rawMajor = Number(game.settings.get("heroic-push-pf2e", "majorInjuryThreshold"));
-        const minorThreshold = Math.min(Math.max(Number.isFinite(rawMinor) ? rawMinor : 33, 0), 100);
-        const majorThreshold = Math.min(Math.max(Number.isFinite(rawMajor) ? rawMajor : 5, 0), 100);
-
-        let resultTitle, resultColor, tableRollText, icon;
-        let severity = null;
-
-        if (injuryRoll.total <= majorThreshold) {
-            severity = "major";
-            resultTitle = "Major Injury!!!";
-            resultColor = "#cc0000";
-            icon = "fa-skull-crossbones";
-            tableRollText = "The hero suffered a Major Injury! Rolling for consequence...";
-        } else if (injuryRoll.total <= minorThreshold) {
-            severity = "minor";
-            resultTitle = "Minor Injury!";
-            resultColor = "#d08000";
-            icon = "fa-user-injured";
-            tableRollText = "The hero suffered a Minor Injury. Rolling for consequence...";
-        } else {
-            resultTitle = "No Injury";
-            resultColor = "#4a8a2a";
-            icon = "fa-check-circle";
-            tableRollText = "The hero pushed through safely.";
-        }
-
-        await ChatMessage.create({
-            speaker: ChatMessage.getSpeaker({ actor, token: combatant.token }),
-            rolls: [injuryRoll],
-            flags: {
-                "heroic-push-pf2e": { isInjuryRoll: true, severity }
-            },
-            flavor: `
-                <div style="background: rgba(0,0,0,0.05); border: 2px solid ${resultColor}; padding: 8px; border-radius: 5px; text-align: center; margin-bottom: 5px;">
-                    <h4 style="color: ${resultColor}; margin: 0 0 5px 0; font-size: 1.2em; border-bottom: 1px solid ${resultColor}; padding-bottom: 3px;">
-                        <i class="fas ${icon}"></i> <strong>${resultTitle}</strong>
-                    </h4>
-                    <p style="margin: 0; font-size: 1.1em;">${tableRollText}</p>
-                </div>`
-        });
-
-        if (severity) {
-            if (typeof determineInjuryDialog === "function") {
-                determineInjuryDialog(actor, severity, "initiative");
-            } else if (typeof window.DetermineInjuryDialog === "function") {
-                window.DetermineInjuryDialog(actor, severity, "initiative");
-            }
-        }
+        await runRecklessInjuryCheck(actor, speaker, "initiative");
     }
 }
 
@@ -670,7 +577,7 @@ export async function recklessPushLast(options = {}) {
  * Macro helper: Displays an interactive dialog letting the user push their last roll with high-contrast UI
  */
 export async function pushLastDialog(options = {}) {
-    let targetActor = options.actor || canvas?.tokens?.controlled?.[0]?.actor || game.user.character || null;
+    const targetActor = options.actor || canvas?.tokens?.controlled?.[0]?.actor || game.user.character || null;
     const lastMsg = findLastPushableMessage({ actor: targetActor });
 
     if (!lastMsg) {
@@ -681,21 +588,20 @@ export async function pushLastDialog(options = {}) {
     if (!rollActor) {
         return ui.notifications.error("Could not determine an actor for that roll.");
     }
-
-    const canControl = game.user.isGM || rollActor.isOwner || (game.user.character?.id === rollActor.id);
-    if (!canControl) {
+    if (!canControlActor(rollActor)) {
         return ui.notifications.warn("You do not have permission to push this character's rolls.");
     }
 
     const hp = rollActor.system?.resources?.heroPoints?.value ?? 0;
     const oldRoll = lastMsg.rolls?.[0];
     const rollTotal = oldRoll?.total ?? "?";
-
     const checkName = getCheckDisplayName(lastMsg);
 
     const context = lastMsg.flags?.pf2e?.context;
     const dcValue = Number(context?.dc?.value ?? context?.dc ?? oldRoll?.options?.dc?.value ?? oldRoll?.options?.dc);
-    const dcText = Number.isFinite(dcValue) ? ` <span style="color: #cbd5e1; font-weight: 500;">(vs DC <strong style="color: #fbbf24;">${dcValue}</strong>)</span>` : "";
+    const dcText = Number.isFinite(dcValue)
+        ? ` <span style="color: #cbd5e1; font-weight: 500;">(vs DC <strong style="color: #fbbf24;">${dcValue}</strong>)</span>`
+        : "";
 
     const hpBadge = hp > 0
         ? `<span style="color: #fbbf24; font-weight: bold;"><i class="fas fa-star" style="color: #f59e0b;"></i> Hero Points: <span style="color: #ffffff; background: #b45309; padding: 2px 8px; border-radius: 10px; font-weight: 800; font-size: 0.95em;">${hp}</span></span>`
@@ -704,7 +610,7 @@ export async function pushLastDialog(options = {}) {
     const content = `
     <div class="pf2e-heroic-push-dialog">
         <div class="push-info-card" style="display: flex; gap: 14px; align-items: center; background: #1a1e2b; border: 2px solid #3d4663; border-radius: 8px; padding: 12px; margin-bottom: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
-            <img src="${rollActor.img || 'icons/svg/mystery-man.svg'}" width="54" height="54" style="border: 2px solid #d4af37; border-radius: 6px; object-fit: cover; box-shadow: 0 2px 5px rgba(0,0,0,0.4);" />
+            <img src="${rollActor.img || "icons/svg/mystery-man.svg"}" width="54" height="54" style="border: 2px solid #d4af37; border-radius: 6px; object-fit: cover; box-shadow: 0 2px 5px rgba(0,0,0,0.4);" />
             <div style="flex: 1;">
                 <div style="font-size: 1.25em; font-weight: 800; color: #ffffff; letter-spacing: 0.5px; text-shadow: 0 1px 3px rgba(0,0,0,0.8);">${rollActor.name}</div>
                 <div style="margin-top: 3px;">${hpBadge}</div>
@@ -727,16 +633,12 @@ export async function pushLastDialog(options = {}) {
             heroic: {
                 icon: '<i class="fas fa-dice-d6" style="color: #4a8a2a;"></i>',
                 label: "Heroic Push (+1d6)",
-                callback: async () => {
-                    await doHeroicPush(lastMsg, "1d6");
-                }
+                callback: () => doHeroicPush(lastMsg, "1d6")
             },
             reckless: {
                 icon: '<i class="fas fa-biohazard" style="color: #cc0000;"></i>',
                 label: "Reckless Push (+2d6)",
-                callback: async () => {
-                    await doHeroicPush(lastMsg, "2d6");
-                }
+                callback: () => doHeroicPush(lastMsg, "2d6")
             },
             cancel: {
                 icon: '<i class="fas fa-times"></i>',
@@ -747,9 +649,6 @@ export async function pushLastDialog(options = {}) {
     }).render(true);
 }
 
-/**
- * Helper to update Degree of Success badge inside HTML strings
- */
 function updateDegreeOfSuccessBadge(htmlString, newOutcome, outcomeLabel) {
     if (!htmlString) return htmlString;
     const outcomes = ["criticalFailure", "failure", "success", "criticalSuccess"];
@@ -779,20 +678,17 @@ export async function doHeroicPush(message, diceString = "1d6") {
 
     const msgActor = getMessageActor(message);
     if (!msgActor) return ui.notifications.error("Could not find an actor associated with that roll.");
-
-    const canControl = game.user.isGM || msgActor.isOwner || (game.user.character?.id === msgActor.id);
-    if (!canControl) return ui.notifications.warn("You do not have permission to push this character's rolls.");
+    if (!canControlActor(msgActor)) return ui.notifications.warn("You do not have permission to push this character's rolls.");
 
     const hp = msgActor.system?.resources?.heroPoints?.value ?? 0;
     if (hp < 1) return ui.notifications.warn(`${msgActor.name} does not have enough Hero Points!`);
 
-    // Deduct 1 Hero Point
     await msgActor.update({ "system.resources.heroPoints.value": hp - 1 });
 
     const oldRoll = message.rolls?.[0];
     if (!oldRoll) return ui.notifications.error("The message did not contain a valid roll to push.");
 
-    // Clean formula of any trailing comments (# ...)
+    // Preserve trailing formula comments (# ...) after appending push dice
     let formula = oldRoll.formula;
     let comment = "";
     if (formula.includes("#")) {
@@ -803,7 +699,6 @@ export async function doHeroicPush(message, diceString = "1d6") {
 
     const newFormula = `${formula} + ${diceString}[Heroic Push]${comment}`;
 
-    // Clean roll options to prevent stale degrees of success
     const rollOptions = foundry.utils.deepClone(oldRoll.options || {});
     delete rollOptions.degreeOfSuccess;
     delete rollOptions.total;
@@ -813,30 +708,20 @@ export async function doHeroicPush(message, diceString = "1d6") {
     const newRoll = new RollClass(newFormula, oldRoll.data, rollOptions);
     await newRoll.evaluate();
 
-    const pushFlavor = diceString === "1d6" ? "(No Injury)" : "(Chance of Injury)";
-    const pushTitle = diceString === "1d6" ? "Heroic Push (+1d6)!" : "Reckless Push (+2d6)!";
-
-    const flavorPrefix = `
-        <div class="pf2e chat-card heroic-push-card">
-            <header class="card-header flexrow" style="align-items: center; padding-bottom: 5px;">
-                <img src="${msgActor.img || 'icons/svg/mystery-man.svg'}" title="${msgActor.name}" width="36" height="36" style="border: none; margin-right: 8px;"/>
-                <h3 style="margin: 0; line-height: normal;">${pushTitle} <br><span style="font-size: 0.8em; color: #555;">${pushFlavor}</span></h3>
-            </header>
-            <div class="card-content" style="margin-top: 5px; margin-bottom: 5px;">
-                <p style="margin: 0 0 5px 0;"><strong>${msgActor.name}</strong> spent 1 Hero Point to push their roll!</p>
-            </div>
-        </div>`;
+    const flavorPrefix = buildPushCardHeader(
+        msgActor,
+        diceString,
+        `<strong>${msgActor.name}</strong> spent 1 Hero Point to push their roll!`
+    );
 
     const msgData = message.toObject();
     delete msgData._id;
     delete msgData.timestamp;
-
     msgData.rolls = [newRoll];
 
     let originalFlavor = msgData.flavor || "";
     const context = msgData.flags?.pf2e?.context;
-    const rawDc = context?.dc?.value ?? context?.dc ?? oldRoll.options?.dc?.value ?? oldRoll.options?.dc;
-    const dcValue = Number(rawDc);
+    const dcValue = Number(context?.dc?.value ?? context?.dc ?? oldRoll.options?.dc?.value ?? oldRoll.options?.dc);
 
     if (Number.isFinite(dcValue)) {
         const total = newRoll.total;
@@ -862,14 +747,12 @@ export async function doHeroicPush(message, diceString = "1d6") {
             if (context.unadjustedOutcome) context.unadjustedOutcome = newOutcome;
         }
 
-        // Update badge in both flavor and content
         originalFlavor = updateDegreeOfSuccessBadge(originalFlavor, newOutcome, newLabel);
         if (msgData.content) {
             msgData.content = updateDegreeOfSuccessBadge(msgData.content, newOutcome, newLabel);
         }
     }
 
-    // Update rendered dice totals in content if present
     if (msgData.content) {
         const tempContent = document.createElement("div");
         tempContent.innerHTML = msgData.content;
@@ -883,110 +766,22 @@ export async function doHeroicPush(message, diceString = "1d6") {
     msgData.flavor = flavorPrefix + originalFlavor;
 
     msgData.flags = foundry.utils.deepClone(msgData.flags || {});
-    foundry.utils.setProperty(msgData.flags, "heroic-push-pf2e.isPushedRoll", true);
-    foundry.utils.setProperty(msgData.flags, "heroic-push-pf2e.pushType", diceString);
-    foundry.utils.setProperty(msgData.flags, "heroic-push-pf2e.originalMessageId", message.id);
+    foundry.utils.setProperty(msgData.flags, `${MODULE_ID}.isPushedRoll`, true);
+    foundry.utils.setProperty(msgData.flags, `${MODULE_ID}.pushType`, diceString);
+    foundry.utils.setProperty(msgData.flags, `${MODULE_ID}.originalMessageId`, message.id);
 
     await ChatMessage.create(msgData);
 
-    // Check if this was an initiative roll and update combat tracker automatically
-    const isInitiative = Boolean(
-        message.flags?.core?.initiativeRoll
-        || message.flags?.pf2e?.context?.type === "initiative"
-        || message.flags?.pf2e?.context?.domains?.includes("initiative")
-        || (message.flavor && message.flavor.toLowerCase().includes("initiative"))
-    );
-
-    if (isInitiative) {
-        let combatant = null;
-        if (game.combat) {
-            combatant = game.combat.combatants.find(c => {
-                if (message.speaker?.token && c.tokenId === message.speaker.token) return true;
-                if (c.actorId === msgActor.id) return true;
-                return false;
-            });
-        }
-        if (!combatant && game.combats) {
-            for (const c of game.combats) {
-                const found = c.combatants.find(cb => {
-                    if (message.speaker?.token && cb.tokenId === message.speaker.token) return true;
-                    if (cb.actorId === msgActor.id) return true;
-                    return false;
-                });
-                if (found) {
-                    combatant = found;
-                    break;
-                }
-            }
-        }
-
+    if (isInitiativeMessage(message)) {
+        const combatant = findCombatantForActor(msgActor, message.speaker?.token);
         if (combatant) {
             await updateCombatantInitiative(combatant, newRoll.total);
             ui.notifications.info(`Updated ${msgActor.name}'s initiative to ${newRoll.total}!`);
         }
     }
 
-    // Reckless Push injury roll
     if (diceString === "2d6") {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        const injuryRoll = new Roll("1d100");
-        await injuryRoll.evaluate();
-
-        const rawMinor = Number(game.settings.get("heroic-push-pf2e", "minorInjuryThreshold"));
-        const rawMajor = Number(game.settings.get("heroic-push-pf2e", "majorInjuryThreshold"));
-        const minorThreshold = Math.min(Math.max(Number.isFinite(rawMinor) ? rawMinor : 33, 0), 100);
-        const majorThreshold = Math.min(Math.max(Number.isFinite(rawMajor) ? rawMajor : 5, 0), 100);
-
-        let resultTitle, resultColor, tableRollText, icon;
-        let severity = null;
-
-        if (injuryRoll.total <= majorThreshold) {
-            severity = "major";
-            resultTitle = "Major Injury!!!";
-            resultColor = "#cc0000";
-            icon = "fa-skull-crossbones";
-            tableRollText = "The hero suffered a Major Injury! Rolling for consequence...";
-        } else if (injuryRoll.total <= minorThreshold) {
-            severity = "minor";
-            resultTitle = "Minor Injury!";
-            resultColor = "#d08000";
-            icon = "fa-user-injured";
-            tableRollText = "The hero suffered a Minor Injury. Rolling for consequence...";
-        } else {
-            resultTitle = "No Injury";
-            resultColor = "#4a8a2a";
-            icon = "fa-check-circle";
-            tableRollText = "The hero pushed through safely.";
-        }
-
-        await ChatMessage.create({
-            speaker: message.speaker,
-            rolls: [injuryRoll],
-            flags: {
-                "heroic-push-pf2e": { isInjuryRoll: true, severity }
-            },
-            flavor: `
-                <div style="background: rgba(0,0,0,0.05); border: 2px solid ${resultColor}; padding: 8px; border-radius: 5px; text-align: center; margin-bottom: 5px;">
-                    <h4 style="color: ${resultColor}; margin: 0 0 5px 0; font-size: 1.2em; border-bottom: 1px solid ${resultColor}; padding-bottom: 3px;">
-                        <i class="fas ${icon}"></i> <strong>${resultTitle}</strong>
-                    </h4>
-                    <p style="margin: 0; font-size: 1.1em;">${tableRollText}</p>
-                </div>`
-        });
-
-        if (severity) {
-            const detectedTrigger = detectInjuryTrigger(message);
-            if (typeof determineInjuryDialog === "function") {
-                ui.notifications.info(`Injury sustained! Determining injury consequence...`);
-                determineInjuryDialog(msgActor, severity, detectedTrigger);
-            } else if (typeof window.DetermineInjuryDialog === "function") {
-                ui.notifications.info(`Injury sustained! Determining injury consequence...`);
-                window.DetermineInjuryDialog(msgActor, severity, detectedTrigger);
-            } else {
-                ui.notifications.warn(`Could not find the function or macro to determine injury.`);
-            }
-        }
+        await runRecklessInjuryCheck(msgActor, message.speaker, detectInjuryTrigger(message));
     }
 }
 
@@ -1007,7 +802,7 @@ export async function getMacroFolder() {
             return null;
         }
     }
-    return folder;
+    return folder || null;
 }
 
 /**
@@ -1019,10 +814,9 @@ async function ensureModuleMacros() {
     const folder = await getMacroFolder();
     const folderId = folder ? folder.id : null;
 
-    // Remove deprecated single-push macros if they were auto-created by this module
     const deprecatedNames = ["Heroic Push (Last Roll)", "Reckless Push (Last Roll)"];
     for (const oldName of deprecatedNames) {
-        const deprecated = game.macros.find(m => m.name === oldName && m.flags?.["heroic-push-pf2e"]?.isManaged);
+        const deprecated = game.macros.find(m => m.name === oldName && m.flags?.[MODULE_ID]?.isManaged);
         if (deprecated) {
             try {
                 await deprecated.delete();
@@ -1037,19 +831,19 @@ async function ensureModuleMacros() {
         {
             name: "Hero Point Last Roll",
             legacyNames: ["PF2e Awesome Hero Points: Push Last Roll"],
-            command: `game.modules.get("heroic-push-pf2e")?.api?.pushLastDialog();`,
+            command: `game.modules.get("${MODULE_ID}")?.api?.pushLastDialog();`,
             img: "icons/commodities/currency/coin-embossed-star-gold.webp",
             type: "script"
         },
         {
             name: "Injury Check",
-            command: `game.modules.get("heroic-push-pf2e")?.api?.injuryCheck();`,
+            command: `game.modules.get("${MODULE_ID}")?.api?.injuryCheck();`,
             img: "icons/skills/wounds/injury-stitched-flesh-red.webp",
             type: "script"
         },
         {
             name: "Determine Injury",
-            command: `window.DetermineInjuryDialog ? window.DetermineInjuryDialog() : game.modules.get("heroic-push-pf2e")?.api?.openDetermineInjury();`,
+            command: `window.DetermineInjuryDialog ? window.DetermineInjuryDialog() : game.modules.get("${MODULE_ID}")?.api?.openDetermineInjury();`,
             img: "icons/skills/wounds/injury-face-impact-orange.webp",
             type: "script"
         }
@@ -1059,9 +853,8 @@ async function ensureModuleMacros() {
         const { legacyNames = [], ...createData } = macroData;
         let existing = game.macros.find(m => m.name === macroData.name);
 
-        // Rename legacy managed macro in-place if new name doesn't exist yet
         if (!existing && legacyNames.length > 0) {
-            existing = game.macros.find(m => legacyNames.includes(m.name) && m.flags?.["heroic-push-pf2e"]?.isManaged);
+            existing = game.macros.find(m => legacyNames.includes(m.name) && m.flags?.[MODULE_ID]?.isManaged);
         }
 
         if (!existing) {
@@ -1070,30 +863,28 @@ async function ensureModuleMacros() {
                     ...createData,
                     folder: folderId,
                     ownership: { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.OBSERVER },
-                    flags: { "heroic-push-pf2e": { isManaged: true } }
+                    flags: { [MODULE_ID]: { isManaged: true } }
                 });
                 console.log(`PF2e Awesome Hero Point Rework | Auto-created macro: ${macroData.name}`);
             } catch (err) {
                 console.warn(`PF2e Awesome Hero Point Rework | Could not create macro ${macroData.name}:`, err);
             }
         } else {
-            // Update name, image, command, and ensure folder membership
             const updates = {};
             if (existing.name !== macroData.name) updates.name = macroData.name;
             if (existing.command !== macroData.command) updates.command = macroData.command;
             if (existing.img !== macroData.img) updates.img = macroData.img;
             if (folderId && existing.folder?.id !== folderId) updates.folder = folderId;
-            if (!existing.flags?.["heroic-push-pf2e"]?.isManaged) {
-                foundry.utils.setProperty(updates, "flags.heroic-push-pf2e.isManaged", true);
+            if (!existing.flags?.[MODULE_ID]?.isManaged) {
+                foundry.utils.setProperty(updates, `flags.${MODULE_ID}.isManaged`, true);
             }
             if (Object.keys(updates).length > 0) {
                 await existing.update(updates);
                 console.log(`PF2e Awesome Hero Point Rework | Updated macro: ${macroData.name}`);
             }
 
-            // Clean up any leftover duplicate legacy macro
             for (const oldName of legacyNames) {
-                const leftover = game.macros.find(m => m.name === oldName && m.id !== existing.id && m.flags?.["heroic-push-pf2e"]?.isManaged);
+                const leftover = game.macros.find(m => m.name === oldName && m.id !== existing.id && m.flags?.[MODULE_ID]?.isManaged);
                 if (leftover) {
                     try {
                         await leftover.delete();

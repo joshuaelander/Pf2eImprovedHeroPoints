@@ -1,9 +1,26 @@
 import { createPrebuiltInjuryItemData } from "../data/injury-items.js";
 
+export const MODULE_ID = "heroic-push-pf2e";
+
+export function clampPercent(value, fallback) {
+    const num = Number(value);
+    return Math.min(Math.max(Number.isFinite(num) ? num : fallback, 0), 100);
+}
+
+export function resolveDomRoot(target) {
+    if (!target) return null;
+    return target instanceof HTMLElement ? target : (target?.[0] || target);
+}
+
+export function canControlActor(actor, user = game.user) {
+    if (!actor || !user) return false;
+    return Boolean(user.isGM || actor.isOwner || user.character?.id === actor.id);
+}
+
 export async function getInjuryFolder() {
     // Find or create a dedicated folder in the Items tab for our injuries
     let folder = game.folders.find(f => f.type === "Item" && (f.name === "PF2e Awesome Hero Point Injuries" || f.name === "Heroic Push Injuries"));
-    if (!folder) {
+    if (!folder && game.user.isGM) {
         try {
             folder = await Folder.create({ name: "PF2e Awesome Hero Point Injuries", type: "Item", color: "#cc0000" });
         } catch (err) {
@@ -11,7 +28,7 @@ export async function getInjuryFolder() {
             return null;
         }
     }
-    return folder;
+    return folder || null;
 }
 
 export async function getOrCreateInjuryEffect(injuryData, categoryData, actor = null) {
@@ -25,7 +42,7 @@ export async function getOrCreateInjuryEffect(injuryData, categoryData, actor = 
 
     let embeddedItem = null;
     if (actor) {
-        const existingActorEffect = actor.items?.find(i => i.name === effectName && i.type === "effect" && i.flags?.["heroic-push-pf2e"]?.injuryName === injuryData.name);
+        const existingActorEffect = actor.items?.find(i => i.name === effectName && i.type === "effect" && i.flags?.[MODULE_ID]?.injuryName === injuryData.name);
         if (existingActorEffect) {
             embeddedItem = existingActorEffect;
         } else {

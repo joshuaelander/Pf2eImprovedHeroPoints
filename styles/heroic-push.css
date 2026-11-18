@@ -22,9 +22,7 @@
 /* Form input dark theme protection as per v14 guide */
 .pf2e-heroic-push-dialog input[type="text"],
 .pf2e-heroic-push-dialog input[type="number"],
-.pf2e-heroic-push-dialog select,
-#determine-injury-dialog select,
-#determine-injury-dialog input {
+.pf2e-heroic-push-dialog select {
     background: #202433 !important;
     color: #ffffff !important;
     border: 1px solid #3d4663 !important;
@@ -33,8 +31,7 @@
 }
 
 .pf2e-heroic-push-dialog input:focus,
-.pf2e-heroic-push-dialog select:focus,
-#determine-injury-dialog select:focus {
+.pf2e-heroic-push-dialog select:focus {
     border-color: #d4af37 !important;
     box-shadow: 0 0 6px rgba(212, 175, 55, 0.4) !important;
     outline: none !important;
